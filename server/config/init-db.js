@@ -10,8 +10,9 @@ async function initDatabase() {
   });
 
   try {
-    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${process.env.DB_NAME || 'flashy'}\``);
-    await connection.query(`USE \`${process.env.DB_NAME || 'flashy'}\``);
+    const dbName = process.env.DB_NAME || 'flashy';
+    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+    await connection.query(`USE \`${dbName}\``);
 
     await connection.query(`
       CREATE TABLE IF NOT EXISTS \`groups\` (
@@ -29,9 +30,11 @@ async function initDatabase() {
         id VARCHAR(36) PRIMARY KEY,
         group_id VARCHAR(36) NOT NULL,
         term TEXT NOT NULL,
-        definition TEXT NOT NULL,
+        definition TEXT,
         term_image VARCHAR(500),
         definition_image VARCHAR(500),
+        notes TEXT,
+        external_links TEXT,
         position INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -50,6 +53,28 @@ async function initDatabase() {
         FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE CASCADE
       )
     `);
+
+    // Migrate existing flashcards table — add new columns if missing
+    const [columns] = await connection.query(
+      `SELECT COLUMN_NAME, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'flashcards'`,
+      [dbName]
+    );
+    const colMap = Object.fromEntries(columns.map(c => [c.COLUMN_NAME, c]));
+
+    if (!colMap.notes) {
+      await connection.query('ALTER TABLE flashcards ADD COLUMN notes TEXT');
+      console.log('Migration: added notes column');
+    }
+    if (!colMap.external_links) {
+      await connection.query('ALTER TABLE flashcards ADD COLUMN external_links TEXT');
+      console.log('Migration: added external_links column');
+    }
+    // Allow definition to be NULL so cards can be image-only
+    if (colMap.definition && colMap.definition.IS_NULLABLE === 'NO') {
+      await connection.query('ALTER TABLE flashcards MODIFY COLUMN definition TEXT');
+      console.log('Migration: made definition nullable');
+    }
 
     console.log('Database initialized successfully!');
   } catch (error) {

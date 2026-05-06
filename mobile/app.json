@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Flashy",
+    "slug": "flashy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "flashy",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.flashy.app"
+    },
+    "android": {
+      "package": "com.flashy.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "supabaseUrl": "",
+      "supabaseAnonKey": ""
+    }
+  }
+}

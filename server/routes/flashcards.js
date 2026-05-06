@@ -3,6 +3,16 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../config/db');
 const upload = require('../middleware/upload');
+const { parseBulkCards, explainCard } = require('../services/openai');
+
+function processCard(row) {
+  if (!row) return row;
+  if (typeof row.external_links === 'string') {
+    try { row.external_links = JSON.parse(row.external_links); } catch { row.external_links = []; }
+  }
+  if (row.external_links == null) row.external_links = [];
+  return row;
+}
 
 // Get all flashcards for a group
 router.get('/group/:groupId', async (req, res) => {
@@ -11,93 +21,31 @@ router.get('/group/:groupId', async (req, res) => {
       'SELECT * FROM flashcards WHERE group_id = ? ORDER BY position ASC',
       [req.params.groupId]
     );
-    res.json(cards);
+    res.json(cards.map(processCard));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get single flashcard
-router.get('/:id', async (req, res) => {
+// Parse bulk text with AI — must be before /:id routes
+router.post('/parse-bulk', async (req, res) => {
   try {
-    const [cards] = await pool.query('SELECT * FROM flashcards WHERE id = ?', [req.params.id]);
-    if (cards.length === 0) {
-      return res.status(404).json({ error: 'Flashcard not found' });
-    }
-    res.json(cards[0]);
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ error: 'Text is required' });
+    const cards = await parseBulkCards(text);
+    res.json({ cards });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Create flashcard
-router.post('/', upload.fields([
-  { name: 'term_image', maxCount: 1 },
-  { name: 'definition_image', maxCount: 1 }
-]), async (req, res) => {
+// Explain card with AI
+router.post('/explain', async (req, res) => {
   try {
-    const { group_id, term, definition, position } = req.body;
-    const id = uuidv4();
-    const termImage = req.files?.term_image?.[0]?.filename || null;
-    const defImage = req.files?.definition_image?.[0]?.filename || null;
-
-    await pool.query(
-      'INSERT INTO flashcards (id, group_id, term, definition, term_image, definition_image, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, group_id, term, definition, termImage, defImage, position || 0]
-    );
-    const [created] = await pool.query('SELECT * FROM flashcards WHERE id = ?', [id]);
-    res.status(201).json(created[0]);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Update flashcard
-router.put('/:id', upload.fields([
-  { name: 'term_image', maxCount: 1 },
-  { name: 'definition_image', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    const { term, definition, position } = req.body;
-    const termImage = req.files?.term_image?.[0]?.filename || undefined;
-    const defImage = req.files?.definition_image?.[0]?.filename || undefined;
-
-    let query = 'UPDATE flashcards SET term = ?, definition = ?';
-    let params = [term, definition];
-
-    if (position !== undefined) {
-      query += ', position = ?';
-      params.push(position);
-    }
-    if (termImage !== undefined) {
-      query += ', term_image = ?';
-      params.push(termImage);
-    } else if (req.body.clear_term_image === 'true') {
-      query += ', term_image = NULL';
-    }
-    if (defImage !== undefined) {
-      query += ', definition_image = ?';
-      params.push(defImage);
-    } else if (req.body.clear_definition_image === 'true') {
-      query += ', definition_image = NULL';
-    }
-
-    query += ' WHERE id = ?';
-    params.push(req.params.id);
-
-    await pool.query(query, params);
-    const [updated] = await pool.query('SELECT * FROM flashcards WHERE id = ?', [req.params.id]);
-    res.json(updated[0]);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete flashcard
-router.delete('/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM flashcards WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Flashcard deleted' });
+    const { term, definition } = req.body;
+    if (!term) return res.status(400).json({ error: 'Term is required' });
+    const explanation = await explainCard(term, definition);
+    res.json({ explanation });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -110,14 +58,97 @@ router.post('/bulk', async (req, res) => {
     const created = [];
     for (let i = 0; i < cards.length; i++) {
       const id = uuidv4();
-      const { term, definition } = cards[i];
+      const { term, definition, notes, external_links } = cards[i];
+      const linksJson = external_links ? JSON.stringify(external_links) : '[]';
       await pool.query(
-        'INSERT INTO flashcards (id, group_id, term, definition, position) VALUES (?, ?, ?, ?, ?)',
-        [id, group_id, term, definition, i]
+        'INSERT INTO flashcards (id, group_id, term, definition, notes, external_links, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, group_id, term, definition || null, notes || null, linksJson, i]
       );
-      created.push({ id, group_id, term, definition, position: i });
+      created.push(processCard({ id, group_id, term, definition: definition || null, notes: notes || null, external_links: [], position: i }));
     }
     res.status(201).json(created);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single flashcard
+router.get('/:id', async (req, res) => {
+  try {
+    const [cards] = await pool.query('SELECT * FROM flashcards WHERE id = ?', [req.params.id]);
+    if (cards.length === 0) return res.status(404).json({ error: 'Flashcard not found' });
+    res.json(processCard(cards[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create flashcard
+router.post('/', upload.fields([
+  { name: 'term_image', maxCount: 1 },
+  { name: 'definition_image', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { group_id, term, definition, position, notes, external_links } = req.body;
+    const id = uuidv4();
+    const termImage = req.files?.term_image?.[0]?.filename || null;
+    const defImage = req.files?.definition_image?.[0]?.filename || null;
+    const linksJson = external_links || '[]';
+
+    await pool.query(
+      'INSERT INTO flashcards (id, group_id, term, definition, term_image, definition_image, notes, external_links, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, group_id, term, definition || null, termImage, defImage, notes || null, linksJson, position || 0]
+    );
+    const [created] = await pool.query('SELECT * FROM flashcards WHERE id = ?', [id]);
+    res.status(201).json(processCard(created[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update flashcard
+router.put('/:id', upload.fields([
+  { name: 'term_image', maxCount: 1 },
+  { name: 'definition_image', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { term, definition, position, notes, external_links } = req.body;
+    const termImage = req.files?.term_image?.[0]?.filename || undefined;
+    const defImage = req.files?.definition_image?.[0]?.filename || undefined;
+
+    let query = 'UPDATE flashcards SET term = ?, definition = ?';
+    let params = [term, definition || null];
+
+    if (notes !== undefined) { query += ', notes = ?'; params.push(notes || null); }
+    if (external_links !== undefined) { query += ', external_links = ?'; params.push(external_links); }
+    if (position !== undefined) { query += ', position = ?'; params.push(position); }
+    if (termImage !== undefined) {
+      query += ', term_image = ?'; params.push(termImage);
+    } else if (req.body.clear_term_image === 'true') {
+      query += ', term_image = NULL';
+    }
+    if (defImage !== undefined) {
+      query += ', definition_image = ?'; params.push(defImage);
+    } else if (req.body.clear_definition_image === 'true') {
+      query += ', definition_image = NULL';
+    }
+
+    query += ' WHERE id = ?';
+    params.push(req.params.id);
+
+    await pool.query(query, params);
+    const [updated] = await pool.query('SELECT * FROM flashcards WHERE id = ?', [req.params.id]);
+    res.json(processCard(updated[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete flashcard
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM flashcards WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Flashcard deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

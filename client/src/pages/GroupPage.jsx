@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Play, Brain, Settings, Trash2, BookOpen, Layers, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { getGroup, getFlashcards, createFlashcard, updateFlashcard, deleteFlashcard, updateGroup } from '../api';
+import { getGroup, getFlashcards, createFlashcard, updateFlashcard, deleteFlashcard, updateGroup, bulkCreateFlashcards } from '../api';
 import FlashcardEditor from '../components/FlashcardEditor';
 import CreateGroupModal from '../components/CreateGroupModal';
 
@@ -50,7 +50,11 @@ function GroupPage() {
     try {
       const formData = new FormData();
       formData.append('term', updatedCard.term);
-      formData.append('definition', updatedCard.definition);
+      formData.append('definition', updatedCard.definition || '');
+      if (updatedCard.notes !== undefined) formData.append('notes', updatedCard.notes || '');
+      if (updatedCard.external_links !== undefined) {
+        formData.append('external_links', JSON.stringify(updatedCard.external_links || []));
+      }
       const original = cards.find(c => c.id === cardId);
       if (original?.term_image && updatedCard.term_image === null) {
         formData.append('clear_term_image', 'true');
@@ -65,12 +69,22 @@ function GroupPage() {
     }
   };
 
+  const handleBulkAdd = async (parsedCards) => {
+    try {
+      const newCards = await bulkCreateFlashcards({ group_id: id, cards: parsedCards });
+      setCards(prev => [...prev, ...newCards.data]);
+    } catch (error) {
+      console.error('Failed to bulk add cards:', error);
+    }
+  };
+
   const handleDeleteCard = async (cardId) => {
     try {
       await deleteFlashcard(cardId);
       setCards(prev => prev.filter(c => c.id !== cardId));
     } catch (error) {
       console.error('Failed to delete card:', error);
+      alert(`Failed to delete card: ${error.response?.data?.error || error.message}`);
     }
   };
 
@@ -191,6 +205,7 @@ function GroupPage() {
           onUpdate={handleUpdateCard}
           onDelete={handleDeleteCard}
           onImageUpload={handleImageUpload}
+          onBulkAdd={handleBulkAdd}
         />
       </div>
 

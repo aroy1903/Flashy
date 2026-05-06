@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Timer, Trophy, RotateCcw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGroup, getFlashcards } from '../api';
+import { stripMarkdown } from '../utils/stripMarkdown';
 
 const MAX_CARDS = 8;
 
@@ -47,7 +48,7 @@ function MatchPage() {
     const newTiles = [];
     picked.forEach(card => {
       newTiles.push({ tileId: `term-${card.id}`, text: card.term, cardId: card.id });
-      newTiles.push({ tileId: `def-${card.id}`, text: card.definition, cardId: card.id });
+      newTiles.push({ tileId: `def-${card.id}`, text: stripMarkdown(card.definition), cardId: card.id });
     });
     setTiles(newTiles.sort(() => Math.random() - 0.5));
     setSelected(null);

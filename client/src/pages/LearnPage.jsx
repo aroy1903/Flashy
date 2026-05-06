@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, XCircle, RotateCcw, Trophy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getGroup, getFlashcards, uploadUrl } from '../api';
+import { stripMarkdown } from '../utils/stripMarkdown';
 
 function LearnPage() {
   const { id } = useParams();
@@ -206,7 +207,7 @@ function LearnPage() {
                       {card.term_image && (
                         <img src={uploadUrl(card.term_image)} alt="" className="max-h-32 rounded-xl object-contain shrink-0" />
                       )}
-                      <p className="text-2xl xl:text-3xl font-semibold text-white text-center leading-relaxed">
+                      <p className="text-2xl xl:text-3xl font-semibold text-white text-left leading-relaxed whitespace-pre-wrap">
                         {card.term}
                       </p>
                     </div>
@@ -224,8 +225,8 @@ function LearnPage() {
                       {card.definition_image && (
                         <img src={uploadUrl(card.definition_image)} alt="" className="max-h-32 rounded-xl object-contain shrink-0" />
                       )}
-                      <p className="text-xl xl:text-2xl text-zinc-300 text-center leading-relaxed">
-                        {card.definition}
+                      <p className="text-xl xl:text-2xl text-zinc-300 text-left leading-relaxed whitespace-pre-wrap">
+                        {stripMarkdown(card.definition)}
                       </p>
                     </div>
                   </div>

@@ -3,7 +3,19 @@
     "allow": [
       "Bash(py:*)",
       "Bash(npm run:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm info *)",
+      "Bash(npx expo *)",
+      "Bash(npm install *)",
+      "Bash(node -e \"const e = require\\('expo/package.json'\\); console.log\\('expo:', e.version\\)\")",
+      "Bash(node -e \"const r = require\\('react-native/package.json'\\); console.log\\('react-native:', r.version\\)\")",
+      "Bash(node *)",
+      "Bash(npm ls *)",
+      "Bash(mv \"/Users/slaya/Documents/GitHub/Flashy/mobile/node_modules/@expo/metro-config 2\" \"/Users/slaya/Documents/GitHub/Flashy/mobile/node_modules/@expo/metro-config\")",
+      "Bash(mv \"/Users/slaya/Documents/GitHub/Flashy/mobile/node_modules/@jest/types 2\" \"/Users/slaya/Documents/GitHub/Flashy/mobile/node_modules/@jest/types\")",
+      "Bash(lsof -i :5173 -sTCP:LISTEN)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(npx vite *)"
     ]
   }
 }

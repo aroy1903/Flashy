@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Heart, Trophy, RotateCcw, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getGroup, getFlashcards, uploadUrl } from '../api';
+import { stripMarkdown } from '../utils/stripMarkdown';
 
 function getSpeed(score) {
   return Math.min(0.35 + Math.floor(score / 4) * 0.18, 2.4);
@@ -122,7 +123,7 @@ function GravityPage() {
     if (game.gameState !== 'playing' || !input.trim()) return;
 
     const card = game.cards[game.currentIdx];
-    const correct = card.definition.trim().toLowerCase();
+    const correct = stripMarkdown(card.definition).toLowerCase();
     const answer = input.trim().toLowerCase();
 
     if (answer === correct) {
@@ -267,7 +268,7 @@ function GravityPage() {
             {game.cards[game.currentIdx] && (
               <div className="mt-6 p-4 bg-white/5 rounded-xl text-left">
                 <p className="text-xs text-zinc-500 mb-1">The answer was:</p>
-                <p className="text-sm text-zinc-300">{game.cards[game.currentIdx].definition}</p>
+                <p className="text-sm text-zinc-300">{stripMarkdown(game.cards[game.currentIdx].definition)}</p>
               </div>
             )}
           </div>

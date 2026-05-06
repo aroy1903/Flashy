@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, XCircle, Trophy, RotateCcw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGroup, generateQuiz, saveQuizResult, uploadUrl } from '../api';
+import { stripMarkdown } from '../utils/stripMarkdown';
 
 function QuizPage() {
   const { id } = useParams();
@@ -72,7 +73,7 @@ function QuizPage() {
         return acc + (answers[q.id] === q.correct_answer ? 1 : 0);
       } else if (q.type === 'written') {
         const userAnswer = (answers[q.id] || '').trim().toLowerCase();
-        const correct = q.correct_answer.trim().toLowerCase();
+        const correct = stripMarkdown(q.correct_answer).toLowerCase();
         return acc + (userAnswer === correct ? 1 : 0);
       }
       return acc;
@@ -100,7 +101,7 @@ function QuizPage() {
         return acc + (answers[q.id] === q.correct_answer ? 1 : 0);
       } else if (q.type === 'written') {
         const userAnswer = (answers[q.id] || '').trim().toLowerCase();
-        const correct = q.correct_answer.trim().toLowerCase();
+        const correct = stripMarkdown(q.correct_answer).toLowerCase();
         return acc + (userAnswer === correct ? 1 : 0);
       }
       return acc;
@@ -203,7 +204,7 @@ function QuizPage() {
               const userAnswer = answers[q.id];
               let isCorrect;
               if (q.type === 'written') {
-                isCorrect = (userAnswer || '').trim().toLowerCase() === q.correct_answer.trim().toLowerCase();
+                isCorrect = (userAnswer || '').trim().toLowerCase() === stripMarkdown(q.correct_answer).toLowerCase();
               } else {
                 isCorrect = userAnswer === q.correct_answer;
               }
@@ -220,9 +221,9 @@ function QuizPage() {
                       <p className="text-sm text-white font-medium">{q.question}</p>
                       {!isCorrect && (
                         <p className="text-xs text-zinc-500 mt-1">
-                          Correct: <span className="text-green-400">{String(q.correct_answer)}</span>
+                          Correct: <span className="text-green-400">{q.type === 'true_false' ? String(q.correct_answer) : stripMarkdown(String(q.correct_answer))}</span>
                           {userAnswer !== undefined && (
-                            <> | Your answer: <span className="text-red-400">{String(userAnswer)}</span></>
+                            <> | Your answer: <span className="text-red-400">{q.type === 'multiple_choice' ? stripMarkdown(String(userAnswer)) : String(userAnswer)}</span></>
                           )}
                         </p>
                       )}
@@ -316,7 +317,7 @@ function QuizPage() {
                   }`}
                 >
                   <span className="text-xs text-zinc-600 mr-3 font-mono">{String.fromCharCode(65 + i)}</span>
-                  {option}
+                  {stripMarkdown(option)}
                 </button>
               ))}
             </div>
@@ -327,7 +328,7 @@ function QuizPage() {
             <div>
               <div className="mb-4 p-4 bg-white/5 rounded-xl">
                 <p className="text-sm text-zinc-400">Proposed definition:</p>
-                <p className="text-white mt-1">{currentQuestion.shown_answer}</p>
+                <p className="text-white mt-1">{stripMarkdown(currentQuestion.shown_answer)}</p>
               </div>
               <div className="flex gap-3">
                 {[true, false].map((val) => (

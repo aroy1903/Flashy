@@ -2,15 +2,17 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, BookOpen, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { getGroups, createGroup, deleteGroup, importAnkiDeck, importTextDeck } from '../api';
+import { getGroups, createGroup, deleteGroup } from '../api';
 import CreateGroupModal from '../components/CreateGroupModal';
+
+const FILTER_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4'];
 
 function HomePage() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
-  const [importing, setImporting] = useState(false);
+  const [colorFilter, setColorFilter] = useState('all');
 
   useEffect(() => {
     fetchGroups();
@@ -37,44 +39,6 @@ function HomePage() {
     }
   };
 
-  const handleImportAnki = async ({ name, description, color, file }) => {
-    const formData = new FormData();
-    formData.append('deck_file', file);
-    if (name) formData.append('name', name);
-    if (description) formData.append('description', description);
-    if (color) formData.append('color', color);
-
-    setImporting(true);
-    try {
-      await importAnkiDeck(formData);
-      await fetchGroups();
-    } catch (error) {
-      console.error('Failed to import Anki deck:', error);
-      throw error;
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleImportText = async ({ name, description, color, file }) => {
-    const formData = new FormData();
-    formData.append('deck_file', file);
-    if (name) formData.append('name', name);
-    if (description) formData.append('description', description);
-    if (color) formData.append('color', color);
-
-    setImporting(true);
-    try {
-      await importTextDeck(formData);
-      await fetchGroups();
-    } catch (error) {
-      console.error('Failed to import text deck:', error);
-      throw error;
-    } finally {
-      setImporting(false);
-    }
-  };
-
   const handleDeleteGroup = async (e, id) => {
     e.preventDefault();
     e.stopPropagation();
@@ -84,13 +48,16 @@ function HomePage() {
         fetchGroups();
       } catch (error) {
         console.error('Failed to delete group:', error);
+        alert(`Failed to delete set: ${error.response?.data?.error || error.message}`);
       }
     }
   };
 
-  const filteredGroups = groups.filter(g =>
-    g.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredGroups = groups.filter(g => {
+    const matchesSearch = g.name.toLowerCase().includes(search.toLowerCase());
+    const matchesColor = colorFilter === 'all' || g.color === colorFilter;
+    return matchesSearch && matchesColor;
+  });
 
   if (loading) {
     return (
@@ -109,7 +76,7 @@ function HomePage() {
       </div>
 
       {/* Search & Create */}
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" />
           <input
@@ -127,6 +94,33 @@ function HomePage() {
           <Plus size={16} />
           New Set
         </button>
+      </div>
+
+      {/* Color filter */}
+      <div className="flex items-center gap-2 mb-8 flex-wrap">
+        <button
+          onClick={() => setColorFilter('all')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+            colorFilter === 'all'
+              ? 'bg-white/10 text-white'
+              : 'text-zinc-500 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          All
+        </button>
+        {FILTER_COLORS.map((c) => (
+          <button
+            key={c}
+            onClick={() => setColorFilter(c)}
+            aria-label={`Filter by ${c}`}
+            className={`w-6 h-6 rounded-full transition-all ${
+              colorFilter === c
+                ? 'ring-2 ring-offset-2 ring-offset-[#0a0a0b] ring-white/40 scale-110'
+                : 'opacity-60 hover:opacity-100 hover:scale-110'
+            }`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
       </div>
 
       {/* Groups Grid */}
@@ -199,9 +193,6 @@ function HomePage() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         onSubmit={handleCreateGroup}
-        onImportAnki={handleImportAnki}
-        onImportText={handleImportText}
-        isImporting={importing}
       />
     </div>
   );
