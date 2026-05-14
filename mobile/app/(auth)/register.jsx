@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, StyleSheet,
+  View, Text, TextInput, Pressable, StyleSheet, Image, ScrollView,
   KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
-import { colors, radii, spacing } from '../../lib/theme';
+import { colors, layout, radii, spacing } from '../../lib/theme';
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -16,6 +16,7 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
+    if (busy) return;
     setError(null); setInfo(null);
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
@@ -36,16 +37,24 @@ export default function Register() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
-        <View style={styles.container}>
-          <Text style={styles.brand}>Flashy</Text>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+        >
+          <Image source={require('../../assets/icon.png')} style={styles.logo} />
+          <Text style={styles.brand}>StuddyPebble</Text>
           <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Start building your decks</Text>
+          <Text style={styles.subtitle}>Build flashcard decks you can study anywhere.</Text>
 
           <TextInput
             style={styles.input}
             placeholder="Email"
             placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
@@ -55,6 +64,8 @@ export default function Register() {
             placeholder="Password (min 6 chars)"
             placeholderTextColor={colors.textFaint}
             secureTextEntry
+            autoComplete="new-password"
+            textContentType="newPassword"
             value={password}
             onChangeText={setPassword}
           />
@@ -63,7 +74,7 @@ export default function Register() {
           {info ? <Text style={styles.info}>{info}</Text> : null}
 
           <Pressable
-            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.btn, (pressed || busy) && { opacity: 0.85 }]}
             onPress={submit}
             disabled={busy}
           >
@@ -76,7 +87,7 @@ export default function Register() {
             <Text style={styles.muted}>Have an account? </Text>
             <Link href="/(auth)/login" style={styles.link}>Sign in</Link>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -85,10 +96,18 @@ export default function Register() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
-  container: { flex: 1, padding: spacing.xl, justifyContent: 'center' },
-  brand: { color: colors.primary, fontSize: 14, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.lg },
+  container: { flexGrow: 1, padding: spacing.xl, justifyContent: 'center' },
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  brand: { color: colors.primaryHover, fontSize: 14, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.lg },
   title: { color: colors.text, fontSize: 28, fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: colors.textMuted, marginBottom: spacing.xl },
+  subtitle: { color: colors.textMuted, marginBottom: spacing.xl, lineHeight: 20, fontSize: 14 },
   input: {
     backgroundColor: colors.inputBg,
     borderWidth: 1,
@@ -97,18 +116,21 @@ const styles = StyleSheet.create({
     padding: 14,
     color: colors.text,
     marginBottom: spacing.md,
+    minHeight: layout.touchTarget,
   },
   btn: {
     backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: radii.md,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: spacing.sm,
+    minHeight: layout.touchTarget,
   },
   btnText: { color: '#fff', fontWeight: '600' },
   error: { color: colors.danger, marginBottom: spacing.sm, fontSize: 13 },
   info: { color: colors.success, marginBottom: spacing.sm, fontSize: 13 },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl, flexWrap: 'wrap' },
   muted: { color: colors.textMuted },
   link: { color: colors.primary, fontWeight: '600' },
 });

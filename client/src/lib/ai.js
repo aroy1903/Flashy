@@ -9,6 +9,15 @@ export async function explainCard({ term, definition }) {
   return data?.explanation || '';
 }
 
+export async function chatAboutCard({ term, definition, messages }) {
+  const { data, error } = await supabase.functions.invoke('chat-card', {
+    body: { term, definition, messages },
+  });
+  if (error) throw new Error(error.message || 'Failed to send message');
+  if (data?.error) throw new Error(data.error);
+  return data?.reply || '';
+}
+
 export async function parseBulkCards(text) {
   const { data, error } = await supabase.functions.invoke('parse-bulk-cards', {
     body: { text },

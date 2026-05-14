@@ -108,6 +108,70 @@ export async function deleteFlashcard(id) {
   if (error) throw error;
 }
 
+export async function listDeckCollections() {
+  const { data, error } = await supabase
+    .from('deck_collections')
+    .select('id, name, updated_at, deck_collection_members(group_id)')
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    updated_at: c.updated_at,
+    group_ids: (c.deck_collection_members ?? []).map((m) => m.group_id),
+  }));
+}
+
+export async function createDeckCollection({ name, group_ids = [] }) {
+  const { data: collection, error } = await supabase
+    .from('deck_collections')
+    .insert({ name })
+    .select()
+    .single();
+  if (error) throw error;
+  if (group_ids.length) {
+    const { error: mErr } = await supabase
+      .from('deck_collection_members')
+      .insert(group_ids.map((gid) => ({ collection_id: collection.id, group_id: gid })));
+    if (mErr) throw mErr;
+  }
+  return { ...collection, group_ids };
+}
+
+export async function renameDeckCollection(id, name) {
+  const { data, error } = await supabase
+    .from('deck_collections')
+    .update({ name })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteDeckCollection(id) {
+  const { error } = await supabase.from('deck_collections').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function setDeckCollectionMembers(collectionId, groupIds) {
+  const { error: dErr } = await supabase
+    .from('deck_collection_members')
+    .delete()
+    .eq('collection_id', collectionId);
+  if (dErr) throw dErr;
+  if (groupIds.length) {
+    const { error: iErr } = await supabase
+      .from('deck_collection_members')
+      .insert(groupIds.map((gid) => ({ collection_id: collectionId, group_id: gid })));
+    if (iErr) throw iErr;
+  }
+  await supabase
+    .from('deck_collections')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', collectionId);
+}
+
 export async function saveQuizResult({ group_id, score, total, quiz_type }) {
   const { data, error } = await supabase
     .from('quiz_results')

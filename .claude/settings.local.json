@@ -15,7 +15,10 @@
       "Bash(mv \"/Users/slaya/Documents/GitHub/Flashy/mobile/node_modules/@jest/types 2\" \"/Users/slaya/Documents/GitHub/Flashy/mobile/node_modules/@jest/types\")",
       "Bash(lsof -i :5173 -sTCP:LISTEN)",
       "mcp__Claude_in_Chrome__tabs_context_mcp",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(supabase --version)",
+      "Bash(supabase functions *)",
+      "Bash(npx eas-cli *)"
     ]
   }
 }

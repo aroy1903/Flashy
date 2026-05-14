@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getGroup, listFlashcards } from '../../../../lib/db';
 import { stripMarkdown } from '../../../../lib/stripMarkdown';
-import { colors, radii, spacing } from '../../../../lib/theme';
+import { colors, layout, radii, spacing } from '../../../../lib/theme';
 
 const MAX_CARDS = 6;
 
@@ -50,7 +50,9 @@ export default function Match() {
   }, [id]);
 
   const buildTiles = (cards) => {
-    const picked = cards.slice(0, MAX_CARDS);
+    const picked = cards
+      .filter((card) => stripMarkdown(card.definition || '').trim())
+      .slice(0, MAX_CARDS);
     const next = [];
     picked.forEach((card) => {
       next.push({ tileId: `t-${card.id}`, text: card.term, cardId: card.id });
@@ -114,7 +116,7 @@ export default function Match() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.center}>
-          <Text style={styles.muted}>Need at least 1 card</Text>
+          <Text style={styles.muted}>Need at least 1 card with a definition</Text>
           <Pressable onPress={() => router.back()}><Text style={styles.link}>Go back</Text></Pressable>
         </View>
       </SafeAreaView>
@@ -125,8 +127,8 @@ export default function Match() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={styles.resultsScroll}>
-          <View style={[styles.trophy, { backgroundColor: colors.success }]}><Text style={styles.trophyText}>🏆</Text></View>
-          <Text style={styles.resultsTitle}>All Matched!</Text>
+          <View style={[styles.trophy, { backgroundColor: colors.success }]}><Text style={styles.trophyText}>OK</Text></View>
+          <Text style={styles.resultsTitle}>All matched</Text>
           <Text style={styles.resultsSub}>{group.name}</Text>
 
           <View style={styles.statsCard}>
@@ -151,7 +153,7 @@ export default function Match() {
               <Text style={styles.btnGhostText}>Play again</Text>
             </Pressable>
             <Pressable style={[styles.btn, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
-              <Text style={styles.btnText}>Back to set</Text>
+              <Text style={styles.btnText}>Back to deck</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -163,7 +165,7 @@ export default function Match() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.back}>← Back to {group.name}</Text>
+          <Text style={styles.back}>← Back to deck</Text>
         </Pressable>
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
@@ -171,7 +173,7 @@ export default function Match() {
             <Text style={styles.subtitle}>Tap two tiles that belong together.</Text>
           </View>
           <View style={styles.statsRight}>
-            <Text style={styles.timer}>⏱ {fmtTime(time)}</Text>
+            <Text style={styles.timer}>{fmtTime(time)}</Text>
             <Text style={styles.matchCount}>
               <Text style={{ color: colors.text, fontWeight: '700' }}>{matched.size}</Text>
               <Text> / {tiles.length / 2}</Text>
@@ -236,8 +238,9 @@ const styles = StyleSheet.create({
   matchCount: { color: colors.textDim, fontSize: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tile: {
-    width: '48%',
-    minHeight: 90,
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 96,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
@@ -247,7 +250,7 @@ const styles = StyleSheet.create({
   },
   tileSelected: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(99,102,241,0.15)',
+    backgroundColor: colors.primarySoft,
   },
   tileWrong: {
     borderColor: colors.danger,
@@ -269,7 +272,7 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 999,
     alignItems: 'center', justifyContent: 'center', marginVertical: spacing.lg,
   },
-  trophyText: { fontSize: 32 },
+  trophyText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   resultsTitle: { color: colors.text, fontSize: 26, fontWeight: '700' },
   resultsSub: { color: colors.textDim, marginTop: 4, marginBottom: spacing.lg },
   statsCard: {
@@ -280,7 +283,15 @@ const styles = StyleSheet.create({
   statCol: { alignItems: 'center' },
   statVal: { color: colors.text, fontSize: 24, fontWeight: '700' },
   statLabel: { color: colors.textFaint, fontSize: 11, marginTop: 4 },
-  btn: { paddingHorizontal: spacing.lg, paddingVertical: 12, borderRadius: radii.md, alignItems: 'center', flex: 1 },
+  btn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minHeight: layout.touchTarget,
+  },
   btnText: { color: '#fff', fontWeight: '600' },
   btnGhostText: { color: colors.textMuted, fontWeight: '600' },
 });

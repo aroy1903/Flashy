@@ -11,7 +11,7 @@ export function parseStructuredDeck(text) {
   while ((m = headerRe.exec(text)) !== null) {
     matches.push({ term: m[1].trim(), start: m.index, headerEnd: m.index + m[0].length });
   }
-  if (matches.length < 2) return null;
+  if (matches.length < 1) return null;
 
   const cards = [];
   for (let i = 0; i < matches.length; i++) {

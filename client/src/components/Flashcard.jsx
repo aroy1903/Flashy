@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles, X, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { uploadUrl, explainCard } from '../api';
+import { uploadUrl, explainCard, chatAboutCard } from '../api';
 
 const mdComponents = {
   h1: ({ node, ...p }) => <h1 className="text-lg font-semibold text-white mt-3 mb-2" {...p} />,
@@ -37,19 +37,28 @@ const mdComponents = {
 function Flashcard({ card, index, total }) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [explanation, setExplanation] = useState('');
+  const [messages, setMessages] = useState([]); // [{ role: 'assistant'|'user', content }]
   const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, loading, sending]);
 
   const handleExplain = async (e) => {
     e.stopPropagation();
     setShowExplanation(true);
-    if (explanation || loading) return;
+    if (messages.length || loading) return;
     setLoading(true);
     setError('');
     try {
       const res = await explainCard({ term: card.term, definition: card.definition });
-      setExplanation(res.data.explanation);
+      setMessages([{ role: 'assistant', content: res.data.explanation }]);
     } catch (err) {
       setError(err.message || 'Failed to get explanation. Check your OpenAI API key.');
     } finally {
@@ -57,16 +66,35 @@ function Flashcard({ card, index, total }) {
     }
   };
 
+  const handleSend = async (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    const text = chatInput.trim();
+    if (!text || sending || loading) return;
+    const userMsg = { role: 'user', content: text };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setChatInput('');
+    setSending(true);
+    setError('');
+    try {
+      const res = await chatAboutCard({
+        term: card.term,
+        definition: card.definition,
+        messages: nextMessages,
+      });
+      setMessages((prev) => [...prev, { role: 'assistant', content: res.data.reply }]);
+    } catch (err) {
+      setError(err.message || 'Failed to send message.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   const closeExplanation = (e) => {
     e?.stopPropagation();
     setShowExplanation(false);
   };
-
-  // Reset explanation when card changes
-  if (card.id && explanation && card._lastExplainedId !== card.id) {
-    // simple invalidation: we tag once, but since component remounts on key change in StudyPage,
-    // we don't need extra logic here. Left intentionally minimal.
-  }
 
   return (
     <div className="relative">
@@ -149,33 +177,82 @@ function Flashcard({ card, index, total }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-xl max-h-[80vh] overflow-y-auto bg-[#141416] border border-white/10 rounded-2xl p-6"
+              className="w-full max-w-xl max-h-[85vh] flex flex-col bg-[#141416] border border-white/10 rounded-2xl"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-indigo-400" />
-                  <h3 className="text-sm font-semibold text-white">{card.term}</h3>
+              <div className="flex items-center justify-between p-5 pb-3 border-b border-white/5 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Sparkles size={16} className="text-indigo-400 shrink-0" />
+                  <h3 className="text-sm font-semibold text-white truncate">{card.term}</h3>
                 </div>
                 <button
                   onClick={closeExplanation}
-                  className="p-1.5 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                  className="p-1.5 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-all shrink-0"
                 >
                   <X size={16} />
                 </button>
               </div>
 
-              {loading && (
-                <div className="flex items-center gap-2 text-sm text-zinc-500 py-6">
-                  <span className="w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                  Generating explanation…
-                </div>
-              )}
-              {error && <p className="text-sm text-red-400">{error}</p>}
-              {!loading && !error && explanation && (
-                <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                  {explanation}
-                </div>
-              )}
+              <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3">
+                {loading && messages.length === 0 && (
+                  <div className="flex items-center gap-2 text-sm text-zinc-500 py-2">
+                    <span className="w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                    Generating explanation…
+                  </div>
+                )}
+                {messages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={
+                      m.role === 'user'
+                        ? 'ml-auto max-w-[85%] bg-indigo-600 text-white text-sm leading-relaxed rounded-2xl rounded-br-md px-4 py-2 whitespace-pre-wrap'
+                        : 'mr-auto max-w-[92%] bg-white/5 text-zinc-200 text-sm leading-relaxed rounded-2xl rounded-bl-md px-4 py-2'
+                    }
+                  >
+                    {m.role === 'assistant' ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                        {m.content}
+                      </ReactMarkdown>
+                    ) : (
+                      m.content
+                    )}
+                  </div>
+                ))}
+                {sending && (
+                  <div className="mr-auto flex items-center gap-2 bg-white/5 text-zinc-400 text-sm rounded-2xl rounded-bl-md px-4 py-2">
+                    <span className="w-3 h-3 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                    Thinking…
+                  </div>
+                )}
+                {error && <p className="text-sm text-red-400">{error}</p>}
+              </div>
+
+              <form
+                onSubmit={handleSend}
+                className="flex items-end gap-2 p-3 border-t border-white/5 shrink-0"
+              >
+                <textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend(e);
+                    }
+                  }}
+                  placeholder="Ask a follow-up..."
+                  disabled={loading}
+                  rows={1}
+                  className="flex-1 resize-none bg-white/5 border border-white/10 focus:border-indigo-500/50 focus:outline-none rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 max-h-32"
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim() || sending || loading}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/5 disabled:text-zinc-500 disabled:cursor-not-allowed rounded-lg transition-all"
+                >
+                  <Send size={14} />
+                  Send
+                </button>
+              </form>
             </motion.div>
           </motion.div>
         )}

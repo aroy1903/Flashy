@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getGroup, listFlashcards } from '../../../../lib/db';
 import { stripMarkdown } from '../../../../lib/stripMarkdown';
-import { colors, radii, spacing } from '../../../../lib/theme';
+import { colors, layout, radii, spacing } from '../../../../lib/theme';
 
 function getSpeed(score) {
   return Math.min(0.35 + Math.floor(score / 4) * 0.18, 2.4);
@@ -75,7 +75,7 @@ export default function Gravity() {
       try {
         const [g, c] = await Promise.all([getGroup(id), listFlashcards(id)]);
         setGroup(g);
-        dispatch({ type: 'INIT', cards: c });
+        dispatch({ type: 'INIT', cards: c.filter((card) => stripMarkdown(card.definition || '').trim()) });
       } catch (e) {
         Alert.alert('Failed to load', e.message);
       } finally {
@@ -129,7 +129,7 @@ export default function Gravity() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.center}>
-          <Text style={styles.muted}>No cards to play Gravity</Text>
+          <Text style={styles.muted}>Gravity needs cards with definitions</Text>
           <Pressable onPress={() => router.back()}><Text style={styles.link}>Go back</Text></Pressable>
         </View>
       </SafeAreaView>
@@ -141,23 +141,23 @@ export default function Gravity() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Text style={styles.back}>← Back to {group.name}</Text>
+            <Text style={styles.back}>← Back to deck</Text>
           </Pressable>
           <Text style={styles.title}>Gravity</Text>
           <Text style={styles.subtitle}>Type the definition before the term hits the ground.</Text>
 
           <View style={styles.idleCard}>
-            <View style={styles.idleZap}><Text style={styles.idleZapText}>⚡</Text></View>
-            <Text style={styles.idleTitle}>How to Play</Text>
+            <View style={styles.idleZap}><Text style={styles.idleZapText}>G</Text></View>
+            <Text style={styles.idleTitle}>How to play</Text>
             <View style={{ marginTop: spacing.md, gap: 8, alignSelf: 'stretch' }}>
-              <Text style={styles.rule}><Text style={styles.ruleArrow}>→</Text> A term falls from the top</Text>
-              <Text style={styles.rule}><Text style={styles.ruleArrow}>→</Text> Type its definition and press Enter</Text>
-              <Text style={styles.rule}><Text style={styles.ruleArrow}>→</Text> If it hits the ground you lose a life</Text>
-              <Text style={styles.rule}><Text style={styles.ruleArrow}>→</Text> 3 lives — speed +18% every 4 right</Text>
+              <Text style={styles.rule}>1. A term falls from the top</Text>
+              <Text style={styles.rule}>2. Type its definition and press Enter</Text>
+              <Text style={styles.rule}>3. If it hits the ground you lose a life</Text>
+              <Text style={styles.rule}>4. 3 lives; speed rises every 4 right</Text>
             </View>
             <Text style={styles.idleFoot}>{game.cards.length} cards · needs exact match</Text>
             <Pressable style={styles.startBtn} onPress={start}>
-              <Text style={styles.startBtnText}>Start Game</Text>
+            <Text style={styles.startBtnText}>Start game</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -171,9 +171,9 @@ export default function Gravity() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={styles.resultsScroll}>
           <View style={[styles.trophy, { backgroundColor: lost ? colors.danger : '#f97316' }]}>
-            <Text style={styles.trophyText}>{lost ? '💀' : '🏆'}</Text>
+            <Text style={styles.trophyText}>{lost ? 'END' : 'WIN'}</Text>
           </View>
-          <Text style={styles.resultsTitle}>{lost ? 'Game Over' : 'You Won!'}</Text>
+          <Text style={styles.resultsTitle}>{lost ? 'Game over' : 'You won'}</Text>
           <Text style={styles.resultsSub}>{group.name}</Text>
 
           <View style={styles.statsCard}>
@@ -212,7 +212,7 @@ export default function Gravity() {
               style={[styles.btn, { backgroundColor: colors.inputBg }]}
               onPress={() => router.back()}
             >
-              <Text style={styles.btnGhostText}>Back to set</Text>
+              <Text style={styles.btnGhostText}>Back to deck</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -232,16 +232,12 @@ export default function Gravity() {
         <View style={{ flex: 1, padding: spacing.lg }}>
           <View style={styles.gameHeader}>
             <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.back}>← Quit</Text>
+              <Text style={styles.back}>Quit</Text>
             </Pressable>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
               <Text style={styles.headStat}>Lv <Text style={{ color: '#fdba74', fontWeight: '700' }}>{getLevel(game.score)}</Text></Text>
               <Text style={styles.headStat}>Score <Text style={{ color: colors.text, fontWeight: '700' }}>{game.score}</Text></Text>
-              <View style={{ flexDirection: 'row', gap: 2 }}>
-                {[0, 1, 2].map((i) => (
-                  <Text key={i} style={{ color: i < game.lives ? colors.danger : colors.textFaint }}>♥</Text>
-                ))}
-              </View>
+              <Text style={styles.headStat}>Lives <Text style={{ color: colors.danger, fontWeight: '700' }}>{game.lives}</Text></Text>
             </View>
           </View>
 
@@ -291,7 +287,7 @@ export default function Gravity() {
             value={input}
             onChangeText={setInput}
             onSubmitEditing={submit}
-            placeholder="Type the definition and press Enter…"
+            placeholder="Type the definition and press Enter..."
             placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
             autoCorrect={false}
@@ -331,12 +327,25 @@ const styles = StyleSheet.create({
   idleZapText: { fontSize: 28 },
   idleTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
   rule: { color: colors.textMuted, fontSize: 13 },
-  ruleArrow: { color: '#fb923c' },
   idleFoot: { color: colors.textFaint, fontSize: 11, marginTop: spacing.lg, marginBottom: spacing.md },
-  startBtn: { backgroundColor: '#f97316', paddingVertical: 12, paddingHorizontal: 32, borderRadius: radii.md },
+  startBtn: {
+    backgroundColor: '#f97316',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: radii.md,
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
+  },
   startBtnText: { color: '#fff', fontWeight: '700' },
 
-  gameHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  gameHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   headStat: { color: colors.textDim, fontSize: 12 },
   cardCountRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   cardCountText: { color: colors.textFaint, fontSize: 11 },
@@ -366,6 +375,7 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: colors.borderStrong,
     borderRadius: radii.md, padding: 14, color: colors.text, fontSize: 14,
+    minHeight: layout.touchTarget,
   },
   inputHint: { color: colors.textFaint, fontSize: 11, textAlign: 'center', marginTop: 6 },
 
@@ -374,7 +384,7 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 999,
     alignItems: 'center', justifyContent: 'center', marginVertical: spacing.lg,
   },
-  trophyText: { fontSize: 32 },
+  trophyText: { color: '#fff', fontSize: 15, fontWeight: '800' },
   resultsTitle: { color: colors.text, fontSize: 26, fontWeight: '700' },
   resultsSub: { color: colors.textDim, marginTop: 4, marginBottom: spacing.lg },
   statsCard: {
@@ -388,7 +398,15 @@ const styles = StyleSheet.create({
   answerBox: { backgroundColor: colors.inputBg, borderRadius: radii.md, padding: spacing.md, marginTop: spacing.md },
   answerLabel: { color: colors.textFaint, fontSize: 11, marginBottom: 4 },
   answerText: { color: colors.textMuted, fontSize: 13 },
-  btn: { paddingHorizontal: spacing.lg, paddingVertical: 12, borderRadius: radii.md, alignItems: 'center', flex: 1 },
+  btn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minHeight: layout.touchTarget,
+  },
   btnText: { color: '#fff', fontWeight: '600' },
   btnGhostText: { color: colors.textMuted, fontWeight: '600' },
 });

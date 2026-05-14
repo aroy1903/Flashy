@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getGroup, listFlashcards } from '../../../../lib/db';
 import { imagePublicUrl } from '../../../../lib/storage';
 import { stripMarkdown } from '../../../../lib/stripMarkdown';
-import { colors, radii, spacing } from '../../../../lib/theme';
+import { colors, layout, radii, spacing } from '../../../../lib/theme';
 
 export default function Learn() {
   const { id } = useLocalSearchParams();
@@ -90,9 +90,9 @@ export default function Learn() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={styles.resultsScroll}>
-          <View style={styles.trophy}><Text style={styles.trophyText}>🏆</Text></View>
-          <Text style={styles.resultsTitle}>All Mastered!</Text>
-          <Text style={styles.resultsSub}>{group.name} — {total} cards</Text>
+          <View style={styles.trophy}><Text style={styles.trophyText}>OK</Text></View>
+          <Text style={styles.resultsTitle}>All mastered</Text>
+          <Text style={styles.resultsSub}>{group.name} - {total} cards</Text>
 
           <View style={styles.statsCard}>
             <View style={styles.statsRow}>
@@ -116,7 +116,7 @@ export default function Learn() {
               <Text style={styles.btnGhostText}>Study again</Text>
             </Pressable>
             <Pressable style={[styles.btn, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
-              <Text style={styles.btnText}>Back to set</Text>
+              <Text style={styles.btnText}>Back to deck</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -131,7 +131,7 @@ export default function Learn() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.container}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.back}>← Back to {group.name}</Text>
+          <Text style={styles.back}>← Back to deck</Text>
         </Pressable>
         <Text style={styles.title}>Learn</Text>
         <Text style={styles.subtitle}>Flip and rate. Misses come back.</Text>
@@ -144,8 +144,8 @@ export default function Learn() {
         </View>
 
         <View style={styles.statsLine}>
-          <Text style={styles.statsHint}>✓ {stats.correct} got it</Text>
-          <Text style={styles.statsHint}>✗ {stats.incorrect} retries</Text>
+          <Text style={styles.statsHint}>{stats.correct} got it</Text>
+          <Text style={styles.statsHint}>{stats.incorrect} retries</Text>
           <Text style={[styles.statsHint, { marginLeft: 'auto' }]}>{queue.length} left</Text>
         </View>
 
@@ -165,7 +165,7 @@ export default function Learn() {
                   {card.definition_image ? (
                     <Image source={{ uri: imagePublicUrl(card.definition_image) }} style={styles.cardImage} resizeMode="contain" />
                   ) : null}
-                  <Text style={styles.cardTextDef}>{stripMarkdown(card.definition || '—')}</Text>
+                  <Text style={styles.cardTextDef}>{stripMarkdown(card.definition || '-')}</Text>
                 </>
               ) : (
                 <>
@@ -182,10 +182,10 @@ export default function Learn() {
         {flipped ? (
           <View style={styles.actionRow}>
             <Pressable style={[styles.actBtn, styles.actDanger]} onPress={dontKnow}>
-              <Text style={[styles.actText, { color: colors.danger }]}>✗ Still learning</Text>
+              <Text style={[styles.actText, { color: colors.danger }]}>Still learning</Text>
             </Pressable>
             <Pressable style={[styles.actBtn, styles.actSuccess]} onPress={know}>
-              <Text style={[styles.actText, { color: colors.success }]}>✓ Got it</Text>
+              <Text style={[styles.actText, { color: colors.success }]}>Got it</Text>
             </Pressable>
           </View>
         ) : (
@@ -225,6 +225,8 @@ const styles = StyleSheet.create({
   flipPill: {
     paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.sm,
     borderWidth: 1, borderColor: colors.border,
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
   },
   flipPillText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
   cardContent: { flexGrow: 1, alignItems: 'stretch', justifyContent: 'center', paddingBottom: spacing.md },
@@ -235,6 +237,8 @@ const styles = StyleSheet.create({
   actBtn: {
     flex: 1, paddingVertical: spacing.md, borderRadius: radii.md, alignItems: 'center',
     borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: layout.touchTarget,
   },
   actDanger: { borderColor: 'rgba(239,68,68,0.3)', backgroundColor: 'rgba(239,68,68,0.10)' },
   actSuccess: { borderColor: 'rgba(34,197,94,0.3)', backgroundColor: 'rgba(34,197,94,0.10)' },
@@ -246,7 +250,7 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 999, backgroundColor: colors.success,
     alignItems: 'center', justifyContent: 'center', marginVertical: spacing.lg,
   },
-  trophyText: { fontSize: 32 },
+  trophyText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   resultsTitle: { color: colors.text, fontSize: 26, fontWeight: '700' },
   resultsSub: { color: colors.textDim, marginTop: 4, marginBottom: spacing.lg },
   statsCard: {
@@ -257,7 +261,15 @@ const styles = StyleSheet.create({
   statCol: { alignItems: 'center' },
   statVal: { color: colors.text, fontSize: 28, fontWeight: '700' },
   statLabel: { color: colors.textFaint, fontSize: 11, marginTop: 4 },
-  btn: { paddingHorizontal: spacing.lg, paddingVertical: 12, borderRadius: radii.md, alignItems: 'center', flex: 1 },
+  btn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minHeight: layout.touchTarget,
+  },
   btnText: { color: '#fff', fontWeight: '600' },
   btnGhostText: { color: colors.textMuted, fontWeight: '600' },
 });

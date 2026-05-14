@@ -79,6 +79,22 @@ export const parseBulkCards = async ({ text }) =>
 export const explainCard = async ({ term, definition }) =>
   wrap({ explanation: await ai.explainCard({ term, definition }) });
 
+export const chatAboutCard = async ({ term, definition, messages }) =>
+  wrap({ reply: await ai.chatAboutCard({ term, definition, messages }) });
+
+// ── Deck collections (folders of decks) ─────────────────────────────────────
+export const getDeckCollections = async () => wrap(await db.listDeckCollections());
+export const createDeckCollection = async (body) => wrap(await db.createDeckCollection(body));
+export const renameDeckCollection = async (id, name) => wrap(await db.renameDeckCollection(id, name));
+export const deleteDeckCollection = async (id) => {
+  await db.deleteDeckCollection(id);
+  return wrap(null);
+};
+export const setDeckCollectionMembers = async (id, groupIds) => {
+  await db.setDeckCollectionMembers(id, groupIds);
+  return wrap(null);
+};
+
 // ── Quizzes ─────────────────────────────────────────────────────────────────
 function shuffle(arr) {
   return [...arr].sort(() => Math.random() - 0.5);

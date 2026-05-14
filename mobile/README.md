@@ -1,10 +1,10 @@
-# Flashy Mobile
+# StuddyPebble Mobile
 
-iOS / Android version of Flashy built with Expo + Supabase. Runs in **Expo Go** on your iPhone.
+iOS / Android version of StuddyPebble built with Expo + Supabase. Runs in **Expo Go** on your iPhone.
 
 ## What it does
 - Email/password auth (Supabase Auth)
-- Per-user sets, cards, and quiz results in Supabase Postgres (RLS enforced)
+- Per-user decks, cards, and quiz results in Supabase Postgres (RLS enforced)
 - Study mode (flip + shuffle) and multiple-choice Quiz mode
 
 ## Setup
@@ -36,8 +36,8 @@ Scan the QR code with the Expo Go app on your iPhone (App Store: "Expo Go"). Pho
 ## File map
 - `app/_layout.jsx` — auth gate, routes signed-out users to `(auth)`, signed-in to `(app)`
 - `app/(auth)/login.jsx`, `register.jsx` — sign in / sign up
-- `app/(app)/index.jsx` — sets list (long-press a card to delete)
-- `app/(app)/group/[id]/index.jsx` — set detail, add/edit/delete cards
+- `app/(app)/index.jsx` — decks list (long-press a deck to delete)
+- `app/(app)/group/[id]/index.jsx` — deck detail, add/edit/delete cards
 - `app/(app)/group/[id]/study.jsx` — tap-to-flip study mode
 - `app/(app)/group/[id]/quiz.jsx` — multiple-choice quiz with score
 - `lib/supabase.js` — Supabase client (AsyncStorage session persistence)

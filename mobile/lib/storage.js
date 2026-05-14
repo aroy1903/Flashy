@@ -25,7 +25,7 @@ export async function uploadCardImage({ groupId, side, asset }) {
   const userId = userRes?.user?.id;
   if (!userId) throw new Error('Not signed in');
 
-  if (!asset?.base64) throw new Error('Image data missing — re-pick the image.');
+  if (!asset?.base64) throw new Error('Image data missing. Re-pick the image.');
 
   const ext = extFromUri(asset.uri, asset.mimeType);
   const path = `${userId}/${groupId}/${side}-${Date.now()}.${ext}`;

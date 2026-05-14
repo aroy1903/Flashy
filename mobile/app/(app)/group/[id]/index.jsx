@@ -3,8 +3,20 @@ import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, Image,
   ActivityIndicator, Alert, RefreshControl, Modal, ScrollView, Platform,
 } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  getGroup, listFlashcards, createFlashcard, updateFlashcard, deleteFlashcard,
+  deleteGroup, bulkCreateFlashcards,
+} from '../../../../lib/db';
+import { uploadCardImage, imagePublicUrl, deleteCardImage } from '../../../../lib/storage';
+import { parseBulkCards } from '../../../../lib/ai';
+import { parseStructuredDeck } from '../../../../lib/parseDeck';
+import { colors, layout, radii, spacing } from '../../../../lib/theme';
+import MarkdownText from '../../../../lib/MarkdownText';
 
-// Alert.alert with destructive buttons is a no-op on Expo Web — fall back to window.confirm.
+// Alert.alert with destructive buttons is a no-op on Expo Web, so use window.confirm there.
 function confirmDestructive(title, message, onConfirm) {
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`)) {
@@ -17,17 +29,6 @@ function confirmDestructive(title, message, onConfirm) {
     { text: 'Delete', style: 'destructive', onPress: onConfirm },
   ]);
 }
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import {
-  getGroup, listFlashcards, createFlashcard, updateFlashcard, deleteFlashcard,
-  deleteGroup, bulkCreateFlashcards,
-} from '../../../../lib/db';
-import { uploadCardImage, imagePublicUrl, deleteCardImage } from '../../../../lib/storage';
-import { parseBulkCards } from '../../../../lib/ai';
-import { parseStructuredDeck } from '../../../../lib/parseDeck';
-import { colors, radii, spacing } from '../../../../lib/theme';
 
 export default function GroupDetail() {
   const { id } = useLocalSearchParams();
@@ -84,7 +85,7 @@ export default function GroupDetail() {
   };
 
   const removeSet = () => {
-    confirmDestructive('Delete set?', 'Removes all cards in this set.', async () => {
+    confirmDestructive('Delete deck?', 'Removes all cards in this deck.', async () => {
       await deleteGroup(id);
       router.back();
     });
@@ -113,7 +114,7 @@ export default function GroupDetail() {
       <FlatList
         data={cards}
         keyExtractor={(c) => c.id}
-        contentContainerStyle={{ padding: spacing.lg }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View>
@@ -129,11 +130,11 @@ export default function GroupDetail() {
 
             <View style={styles.modes}>
               {[
-                { route: 'study',   label: 'Study',   desc: 'Flip cards',    bg: 'rgba(99,102,241,0.15)',  fg: '#a5b4fc' },
-                { route: 'learn',   label: 'Learn',   desc: 'Self-assess',   bg: 'rgba(139,92,246,0.15)',  fg: '#c4b5fd' },
-                { route: 'quiz',    label: 'Quiz',    desc: 'MC / T-F / write', bg: 'rgba(59,130,246,0.15)', fg: '#93c5fd' },
+                { route: 'study',   label: 'Study',   desc: 'Flip cards',    bg: colors.primarySoft,  fg: colors.primaryHover },
+                { route: 'learn',   label: 'Learn',   desc: 'Self-assess',   bg: 'rgba(34,197,94,0.14)',  fg: '#86efac' },
+                { route: 'quiz',    label: 'Quiz',    desc: 'MC / T-F / write', bg: 'rgba(59,130,246,0.14)', fg: '#93c5fd' },
                 { route: 'match',   label: 'Match',   desc: 'Pair tiles',    bg: 'rgba(16,185,129,0.15)',  fg: '#6ee7b7' },
-                { route: 'gravity', label: 'Gravity', desc: 'Type to save',  bg: 'rgba(249,115,22,0.15)',  fg: '#fdba74' },
+                { route: 'gravity', label: 'Gravity', desc: 'Type to save',  bg: colors.secondarySoft,  fg: '#ffb19c' },
               ].map((m) => (
                 <Pressable
                   key={m.route}
@@ -149,7 +150,7 @@ export default function GroupDetail() {
             <View style={styles.sectionRow}>
               <Text style={styles.section}>ADD CARD</Text>
               <Pressable style={styles.bulkBtn} onPress={() => setBulkOpen(true)}>
-                <Text style={styles.bulkBtnText}>📋 Bulk Add</Text>
+                <Text style={styles.bulkBtnText}>Bulk add</Text>
               </Pressable>
             </View>
             <TextInput
@@ -181,18 +182,17 @@ export default function GroupDetail() {
             index={index}
             groupId={id}
             onSave={async (patch) => {
-              try {
-                const updated = await updateFlashcard(item.id, patch);
-                setCards((prev) => prev.map((c) => (c.id === item.id ? updated : c)));
-              } catch (e) { Alert.alert('Failed', e.message); }
+              const updated = await updateFlashcard(item.id, patch);
+              setCards((prev) => prev.map((c) => (c.id === item.id ? updated : c)));
+              return updated;
             }}
             onDelete={() => removeCard(item.id)}
           />
         )}
-        ListEmptyComponent={<Text style={styles.emptyCards}>No cards yet — add one above</Text>}
+        ListEmptyComponent={<Text style={styles.emptyCards}>No cards yet. Add one above.</Text>}
         ListFooterComponent={
           <Pressable onPress={removeSet} style={styles.deleteSet}>
-            <Text style={styles.deleteSetText}>Delete this set</Text>
+            <Text style={styles.deleteSetText}>Delete this deck</Text>
           </Pressable>
         }
       />
@@ -214,6 +214,7 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
   const [notes, setNotes] = useState(card.notes || '');
   const [links, setLinks] = useState(card.external_links || []);
   const [uploading, setUploading] = useState(null); // 'term' | 'definition' | null
+  const [saving, setSaving] = useState(false);
 
   const pickImage = async (side) => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -232,7 +233,7 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
       const path = await uploadCardImage({ groupId, side, asset: result.assets[0] });
       const field = side === 'term' ? 'term_image' : 'definition_image';
       const oldPath = card[field];
-      onSave({ [field]: path });
+      await onSave({ [field]: path });
       if (oldPath) deleteCardImage(oldPath).catch(() => {});
     } catch (e) {
       Alert.alert('Upload failed', e.message);
@@ -241,26 +242,54 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
     }
   };
 
-  const removeImage = (side) => {
+  const removeImage = async (side) => {
     const field = side === 'term' ? 'term_image' : 'definition_image';
     const oldPath = card[field];
-    onSave({ [field]: null });
-    if (oldPath) deleteCardImage(oldPath).catch(() => {});
-  };
-
-  const saveExtras = () => {
-    const patch = {};
-    if (notes !== (card.notes || '')) patch.notes = notes;
-    const cur = JSON.stringify(card.external_links || []);
-    const next = JSON.stringify(links);
-    if (cur !== next) patch.external_links = links;
-    if (Object.keys(patch).length) onSave(patch);
+    try {
+      await onSave({ [field]: null });
+      if (oldPath) deleteCardImage(oldPath).catch(() => {});
+    } catch (e) {
+      Alert.alert('Failed', e.message);
+    }
   };
 
   const addLink = () => setLinks((arr) => [...arr, { label: '', url: '' }]);
   const updateLink = (i, field, value) =>
     setLinks((arr) => arr.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
   const removeLink = (i) => setLinks((arr) => arr.filter((_, idx) => idx !== i));
+  const saveEdits = async () => {
+    const nextTerm = t.trim();
+    if (!nextTerm) {
+      Alert.alert('Term required', 'Cards need a term before they can be saved.');
+      return;
+    }
+    const cleanLinks = links
+      .map((l) => ({ label: l.label?.trim() || '', url: l.url?.trim() || '' }))
+      .filter((l) => l.label || l.url);
+    const patch = {};
+    if (nextTerm !== card.term) patch.term = nextTerm;
+    if (d !== (card.definition || '')) patch.definition = d || null;
+    if (notes !== (card.notes || '')) patch.notes = notes;
+    const cur = JSON.stringify(card.external_links || []);
+    const next = JSON.stringify(cleanLinks);
+    if (cur !== next) patch.external_links = cleanLinks;
+    if (!Object.keys(patch).length) {
+      setLinks(cleanLinks);
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(patch);
+      setT(nextTerm);
+      setLinks(cleanLinks);
+      setEditing(false);
+    } catch (e) {
+      Alert.alert('Failed', e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (editing) {
     return (
@@ -298,7 +327,7 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
         />
 
         <Pressable onPress={() => setExpanded((v) => !v)} style={{ marginTop: spacing.md }}>
-          <Text style={styles.expandLink}>{expanded ? '▾ Hide notes & links' : '▸ Notes & links'}</Text>
+          <Text style={styles.expandLink}>{expanded ? 'Hide notes & links' : 'Notes & links'}</Text>
         </Pressable>
 
         {expanded && (
@@ -308,7 +337,7 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
               style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
               value={notes}
               onChangeText={setNotes}
-              placeholder="Mnemonics, context, anything…"
+              placeholder="Mnemonics, context, anything..."
               placeholderTextColor={colors.textFaint}
               multiline
             />
@@ -325,7 +354,7 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
                 />
                 <TextInput
                   style={[styles.input, { flex: 2, marginBottom: 0 }]}
-                  placeholder="https://…"
+                  placeholder="https://..."
                   placeholderTextColor={colors.textFaint}
                   value={lnk.url}
                   autoCapitalize="none"
@@ -333,7 +362,7 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
                   onChangeText={(v) => updateLink(i, 'url', v)}
                 />
                 <Pressable onPress={() => removeLink(i)} hitSlop={8}>
-                  <Text style={styles.removeLink}>✕</Text>
+                  <Text style={styles.removeLink}>Remove</Text>
                 </Pressable>
               </View>
             ))}
@@ -346,19 +375,10 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Pressable
             style={[styles.smallBtn, { backgroundColor: colors.primary }]}
-            onPress={() => {
-              const patch = {};
-              if (t !== card.term) patch.term = t;
-              if (d !== (card.definition || '')) patch.definition = d || null;
-              if (notes !== (card.notes || '')) patch.notes = notes;
-              const cur = JSON.stringify(card.external_links || []);
-              const next = JSON.stringify(links);
-              if (cur !== next) patch.external_links = links;
-              if (Object.keys(patch).length) onSave(patch);
-              setEditing(false);
-            }}
+            onPress={saveEdits}
+            disabled={saving}
           >
-            <Text style={styles.smallBtnText}>Save</Text>
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.smallBtnText}>Save</Text>}
           </Pressable>
           <Pressable
             style={[styles.smallBtn, { backgroundColor: colors.inputBg }]}
@@ -384,14 +404,18 @@ function CardRow({ card, index, groupId, onSave, onDelete }) {
       {card.term_image ? (
         <Image source={{ uri: imagePublicUrl(card.term_image) }} style={styles.thumb} />
       ) : null}
-      {card.definition ? <Text style={styles.cardDef}>{card.definition}</Text> : null}
+      {card.definition ? (
+        <View style={styles.cardDefWrap}>
+          <MarkdownText size="sm">{card.definition}</MarkdownText>
+        </View>
+      ) : null}
       {card.definition_image ? (
         <Image source={{ uri: imagePublicUrl(card.definition_image) }} style={styles.thumb} />
       ) : null}
       {hasExtras ? (
         <Text style={styles.extrasHint}>
-          {card.notes ? '📝 notes' : ''}{card.notes && card.external_links?.length ? '  ·  ' : ''}
-          {card.external_links?.length ? `🔗 ${card.external_links.length} link${card.external_links.length > 1 ? 's' : ''}` : ''}
+          {card.notes ? 'Notes' : ''}{card.notes && card.external_links?.length ? '  |  ' : ''}
+          {card.external_links?.length ? `${card.external_links.length} link${card.external_links.length > 1 ? 's' : ''}` : ''}
         </Text>
       ) : null}
       <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
@@ -418,7 +442,7 @@ function ImageSlot({ path, uploading, onPick, onRemove }) {
         <Pressable onPress={onPick} disabled={uploading} style={styles.imagePick}>
           {uploading
             ? <ActivityIndicator color={colors.primary} />
-            : <Text style={styles.imagePickText}>🖼  Add image / GIF</Text>}
+            : <Text style={styles.imagePickText}>Add image or GIF</Text>}
         </Pressable>
       )}
     </View>
@@ -452,8 +476,24 @@ function BulkAddModal({ visible, onClose, onConfirm }) {
     setError('');
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
     const cards = [];
+    let pendingTerm = '';
     for (const line of lines) {
-      // tab, " - ", " — ", or first ":" splits term/definition
+      const field = line.match(/^(term|front|question|definition|back|answer)\s*:\s*(.*)$/i);
+      if (field) {
+        const key = field[1].toLowerCase();
+        const value = field[2].trim();
+        if (['term', 'front', 'question'].includes(key)) {
+          if (pendingTerm) cards.push({ term: pendingTerm, definition: '' });
+          pendingTerm = value;
+        } else if (pendingTerm) {
+          cards.push({ term: pendingTerm, definition: value });
+          pendingTerm = '';
+        } else if (value) {
+          cards.push({ term: value, definition: '' });
+        }
+        continue;
+      }
+      // Tab, spaced dash, or the first colon splits term/definition.
       let split = line.split('\t');
       if (split.length < 2) split = line.split(/\s+[—-]\s+/);
       if (split.length < 2) {
@@ -464,6 +504,7 @@ function BulkAddModal({ visible, onClose, onConfirm }) {
       const d = (split.slice(1).join(' ') || '').trim();
       if (t) cards.push({ term: t, definition: d });
     }
+    if (pendingTerm) cards.push({ term: pendingTerm, definition: '' });
     if (!cards.length) setError('No cards found. Try one card per line.');
     else setParsed(cards);
   };
@@ -484,11 +525,11 @@ function BulkAddModal({ visible, onClose, onConfirm }) {
         <View style={styles.bulkSheet}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Bulk Add Cards</Text>
-            <Pressable onPress={close} hitSlop={8}><Text style={styles.modalClose}>✕</Text></Pressable>
+            <Pressable onPress={close} hitSlop={8}><Text style={styles.modalClose}>Close</Text></Pressable>
           </View>
 
           <Text style={styles.modalHelp}>
-            Paste cards in any format. For decks with "## Card N: Title" headers + multi-line bodies, use Markdown deck (no AI, preserves formatting). One per line / "term: def" → Quick parse or AI.
+            Paste one card per line, term: definition pairs, or a Markdown deck with "## Card N: Title" headings.
           </Text>
 
           <TextInput
@@ -509,7 +550,7 @@ function BulkAddModal({ visible, onClose, onConfirm }) {
                 {parsed.map((c, i) => (
                   <View key={i} style={styles.previewItem}>
                     <Text style={styles.previewTerm}>{c.term}</Text>
-                    {c.definition ? <Text style={styles.previewDef}> — {c.definition}</Text> : null}
+                    {c.definition ? <Text style={styles.previewDef}> - {c.definition}</Text> : null}
                   </View>
                 ))}
               </ScrollView>
@@ -524,7 +565,7 @@ function BulkAddModal({ visible, onClose, onConfirm }) {
                   onPress={handleParseMarkdown}
                   disabled={!text.trim()}
                 >
-                  <Text style={styles.smallBtnText}>📑 Markdown deck</Text>
+                  <Text style={styles.smallBtnText}>Markdown deck</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.smallBtn, { backgroundColor: colors.primary, flex: 1 }]}
@@ -533,7 +574,7 @@ function BulkAddModal({ visible, onClose, onConfirm }) {
                 >
                   {parsing
                     ? <ActivityIndicator color="#fff" />
-                    : <Text style={styles.smallBtnText}>✨ Parse with AI</Text>}
+                    : <Text style={styles.smallBtnText}>Parse with AI</Text>}
                 </Pressable>
                 <Pressable
                   style={[styles.smallBtn, { backgroundColor: colors.inputBg }]}
@@ -577,7 +618,8 @@ const styles = StyleSheet.create({
   meta: { color: colors.textFaint, fontSize: 13, marginTop: 6 },
   modes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg, marginBottom: spacing.lg },
   modeBtn: {
-    width: '48%',
+    flexBasis: '48%',
+    flexGrow: 1,
     minHeight: 80,
     padding: spacing.md,
     borderRadius: radii.lg,
@@ -589,14 +631,25 @@ const styles = StyleSheet.create({
   section: { color: colors.textMuted, fontSize: 12, fontWeight: '700', letterSpacing: 1 },
   bulkBtn: {
     paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radii.sm,
-    borderWidth: 1, borderColor: 'rgba(99,102,241,0.4)',
+    borderWidth: 1, borderColor: 'rgba(20,184,166,0.42)',
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
   },
-  bulkBtnText: { color: '#a5b4fc', fontSize: 12, fontWeight: '600' },
+  bulkBtnText: { color: colors.primaryHover, fontSize: 12, fontWeight: '600' },
   input: {
     backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border,
     borderRadius: radii.md, padding: 12, color: colors.text, marginBottom: spacing.sm,
+    minHeight: layout.touchTarget,
   },
-  addBtn: { backgroundColor: colors.primary, padding: 12, borderRadius: radii.md, alignItems: 'center', marginTop: 4 },
+  addBtn: {
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    minHeight: layout.touchTarget,
+  },
   addBtnText: { color: '#fff', fontWeight: '600' },
   cardItem: {
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
@@ -604,11 +657,18 @@ const styles = StyleSheet.create({
   },
   cardIdx: { color: colors.textFaint, fontSize: 11, marginBottom: 4 },
   cardTerm: { color: colors.text, fontWeight: '600' },
-  cardDef: { color: colors.textMuted, marginTop: 4 },
+  cardDefWrap: { marginTop: 4 },
   cardLabel: { color: colors.textFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
   cardAction: { color: colors.primary, fontSize: 13, fontWeight: '500' },
   emptyCards: { color: colors.textFaint, textAlign: 'center', paddingVertical: spacing.xl },
-  smallBtn: { paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radii.sm, alignItems: 'center' },
+  smallBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: layout.touchTarget,
+  },
   smallBtnText: { color: '#fff', fontWeight: '600' },
   deleteSet: { padding: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   deleteSetText: { color: colors.danger, fontSize: 13 },
@@ -617,13 +677,14 @@ const styles = StyleSheet.create({
   imageSlot: { marginTop: 4, marginBottom: spacing.sm },
   imagePick: {
     borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
-    borderRadius: radii.sm, padding: 10, alignItems: 'center',
+    borderRadius: radii.sm, padding: 10, alignItems: 'center', justifyContent: 'center',
+    minHeight: layout.touchTarget,
   },
   imagePickText: { color: colors.textMuted, fontSize: 13 },
   removeImage: { color: colors.danger, fontSize: 12 },
   expandLink: { color: colors.primary, fontSize: 13, fontWeight: '500' },
-  linkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  removeLink: { color: colors.danger, fontSize: 16, paddingHorizontal: 4 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  removeLink: { color: colors.danger, fontSize: 12, fontWeight: '600', paddingHorizontal: 4 },
   extrasHint: { color: colors.textFaint, fontSize: 11, marginTop: spacing.sm },
   modalBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end',
@@ -631,10 +692,11 @@ const styles = StyleSheet.create({
   bulkSheet: {
     backgroundColor: colors.card, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl,
     padding: spacing.lg, borderWidth: 1, borderColor: colors.border,
+    maxHeight: layout.maxSheetHeight,
   },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   modalTitle: { color: colors.text, fontWeight: '700', fontSize: 16 },
-  modalClose: { color: colors.textMuted, fontSize: 18 },
+  modalClose: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
   modalHelp: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
   modalError: { color: '#f87171', fontSize: 13, marginTop: 4 },
   previewItem: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },

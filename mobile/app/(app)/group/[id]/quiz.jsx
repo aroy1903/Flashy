@@ -6,12 +6,30 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getGroup, listFlashcards, saveQuizResult } from '../../../../lib/db';
 import { stripMarkdown } from '../../../../lib/stripMarkdown';
-import { colors, radii, spacing } from '../../../../lib/theme';
+import { colors, layout, radii, spacing } from '../../../../lib/theme';
 
 const TYPES = [
-  { id: 'multiple_choice', label: 'Multiple Choice', desc: 'Pick the correct answer from 4 options', min: 4 },
-  { id: 'true_false',      label: 'True / False',    desc: 'Decide if the pairing is correct',       min: 2 },
-  { id: 'written',         label: 'Written',         desc: 'Type the answer from memory',            min: 1 },
+  {
+    id: 'multiple_choice',
+    label: 'Multiple Choice',
+    desc: 'Pick the correct answer from 4 options',
+    min: 4,
+    minLabel: '4 unique definitions',
+  },
+  {
+    id: 'true_false',
+    label: 'True / False',
+    desc: 'Decide if the pairing is correct',
+    min: 2,
+    minLabel: '2 unique definitions',
+  },
+  {
+    id: 'written',
+    label: 'Written',
+    desc: 'Type the answer from memory',
+    min: 1,
+    minLabel: '1 card',
+  },
 ];
 
 function shuffle(arr) {
@@ -20,16 +38,23 @@ function shuffle(arr) {
 
 function buildMultipleChoice(cards) {
   return shuffle(cards).map((c) => {
-    const wrong = shuffle(cards.filter((x) => x.id !== c.id))
-      .slice(0, 3)
-      .map((x) => stripMarkdown(x.definition || ''));
-    const options = shuffle([stripMarkdown(c.definition || ''), ...wrong]);
+    const correct = stripMarkdown(c.definition || '');
+    const wrong = shuffle(
+      [...new Set(
+        cards
+          .filter((x) => x.id !== c.id)
+          .map((x) => stripMarkdown(x.definition || ''))
+          .filter((answer) => answer && answer !== correct),
+      )],
+    )
+      .slice(0, 3);
+    const options = shuffle([correct, ...wrong]);
     return {
       id: c.id,
       type: 'multiple_choice',
       question: c.term,
       options,
-      correct_answer: stripMarkdown(c.definition || ''),
+      correct_answer: correct,
     };
   });
 }
@@ -41,9 +66,12 @@ function buildTrueFalse(cards) {
     if (showCorrect) {
       shown = stripMarkdown(c.definition || '');
     } else {
-      const others = cards.filter((x) => x.id !== c.id);
-      const decoy = others[Math.floor(Math.random() * others.length)];
-      shown = stripMarkdown(decoy?.definition || '');
+      const correct = stripMarkdown(c.definition || '');
+      const decoys = cards
+        .filter((x) => x.id !== c.id)
+        .map((x) => stripMarkdown(x.definition || ''))
+        .filter((answer) => answer && answer !== correct);
+      shown = decoys[Math.floor(Math.random() * decoys.length)] || correct;
     }
     return {
       id: c.id,
@@ -93,14 +121,20 @@ export default function Quiz() {
 
   const start = (type) => {
     const def = TYPES.find((t) => t.id === type);
-    if (cards.length < def.min) {
-      Alert.alert('Not enough cards', `Need at least ${def.min} card${def.min > 1 ? 's' : ''} for ${def.label}.`);
+    const answerableCards = cards.filter((c) => stripMarkdown(c.definition || '').trim());
+    const uniqueAnswers = new Set(answerableCards.map((c) => stripMarkdown(c.definition || '').trim()));
+    const available = type === 'written' ? answerableCards.length : uniqueAnswers.size;
+    if (available < def.min) {
+      Alert.alert(
+        'Not enough cards',
+        `Need at least ${def.min} unique definition${def.min > 1 ? 's' : ''} for ${def.label}.`,
+      );
       return;
     }
     let qs = [];
-    if (type === 'multiple_choice') qs = buildMultipleChoice(cards);
-    else if (type === 'true_false') qs = buildTrueFalse(cards);
-    else qs = buildWritten(cards);
+    if (type === 'multiple_choice') qs = buildMultipleChoice(answerableCards);
+    else if (type === 'true_false') qs = buildTrueFalse(answerableCards);
+    else qs = buildWritten(answerableCards);
     setQuestions(qs);
     setAnswers({});
     setIdx(0);
@@ -138,9 +172,9 @@ export default function Quiz() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Text style={styles.back}>← Back to {group?.name}</Text>
+            <Text style={styles.back}>← Back to deck</Text>
           </Pressable>
-          <Text style={styles.title}>Quiz Mode</Text>
+          <Text style={styles.title}>Quiz</Text>
           <Text style={styles.subtitle}>Choose a quiz type</Text>
 
           <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
@@ -152,7 +186,7 @@ export default function Quiz() {
               >
                 <Text style={styles.typeLabel}>{t.label}</Text>
                 <Text style={styles.typeDesc}>{t.desc}</Text>
-                <Text style={styles.typeMin}>Min {t.min} card{t.min > 1 ? 's' : ''}</Text>
+                <Text style={styles.typeMin}>Min {t.minLabel}</Text>
               </Pressable>
             ))}
           </View>
@@ -166,8 +200,8 @@ export default function Quiz() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={styles.resultsScroll}>
-          <View style={styles.trophy}><Text style={styles.trophyText}>🏆</Text></View>
-          <Text style={styles.resultsTitle}>Quiz Complete!</Text>
+          <View style={styles.trophy}><Text style={styles.trophyText}>OK</Text></View>
+          <Text style={styles.resultsTitle}>Quiz complete</Text>
           <Text style={styles.resultsSub}>{group?.name}</Text>
 
           <View style={styles.scoreCard}>
@@ -195,7 +229,7 @@ export default function Quiz() {
                 key={q.id}
                 style={[styles.review, { borderColor: ok ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }]}
               >
-                <Text style={styles.reviewQ}>{ok ? '✓' : '✗'}  {q.question}</Text>
+                <Text style={styles.reviewQ}>{ok ? 'Correct' : 'Review'}: {q.question}</Text>
                 {!ok && (
                   <Text style={styles.reviewA}>
                     Correct: <Text style={{ color: colors.success }}>{correctText}</Text>
@@ -216,7 +250,7 @@ export default function Quiz() {
               style={[styles.btn, { backgroundColor: colors.primary }]}
               onPress={() => router.back()}
             >
-              <Text style={styles.btnText}>Back to set</Text>
+              <Text style={styles.btnText}>Back to deck</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -294,7 +328,7 @@ export default function Quiz() {
               style={styles.writtenInput}
               value={answers[q.id] || ''}
               onChangeText={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
-              placeholder="Type your answer…"
+              placeholder="Type your answer..."
               placeholderTextColor={colors.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
@@ -369,8 +403,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
     borderWidth: 1, borderColor: colors.border, borderRadius: radii.md,
     padding: spacing.md, marginBottom: spacing.sm,
+    minHeight: layout.touchTarget,
   },
-  optionSelected: { borderColor: colors.primary, backgroundColor: 'rgba(99,102,241,0.15)' },
+  optionSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   optionLetter: { color: colors.textFaint, fontFamily: 'Menlo', fontSize: 12, marginTop: 2 },
   optionText: { color: colors.textMuted, flex: 1, fontSize: 14 },
 
@@ -383,24 +418,35 @@ const styles = StyleSheet.create({
   tfBtn: {
     flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderRadius: radii.md,
     borderWidth: 1, borderColor: colors.border,
+    justifyContent: 'center',
+    minHeight: layout.touchTarget,
   },
   tfBtnText: { color: colors.textMuted, fontWeight: '600' },
 
   writtenInput: {
     backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border,
     borderRadius: radii.md, padding: 14, color: colors.text, fontSize: 14,
+    minHeight: layout.touchTarget,
   },
 
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
   navText: { color: colors.textMuted, fontSize: 14 },
-  btn: { paddingHorizontal: spacing.lg, paddingVertical: 12, borderRadius: radii.md, alignItems: 'center', flex: 1 },
+  btn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minHeight: layout.touchTarget,
+  },
   btnText: { color: '#fff', fontWeight: '600' },
   btnGhostText: { color: colors.textMuted, fontWeight: '600' },
 
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: spacing.xl, flexWrap: 'wrap' },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotActive: { width: 22, backgroundColor: colors.primary },
-  dotAnswered: { backgroundColor: 'rgba(99,102,241,0.5)' },
+  dotAnswered: { backgroundColor: 'rgba(20,184,166,0.5)' },
   dotEmpty: { backgroundColor: 'rgba(255,255,255,0.10)' },
 
   resultsScroll: { padding: spacing.lg, alignItems: 'center' },
@@ -408,7 +454,7 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 999, backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center', marginVertical: spacing.lg,
   },
-  trophyText: { fontSize: 32 },
+  trophyText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   resultsTitle: { color: colors.text, fontSize: 26, fontWeight: '700' },
   resultsSub: { color: colors.textDim, marginTop: 4, marginBottom: spacing.lg },
   scoreCard: {
