@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, BookOpen, Search, X, Pencil, Trash2, Folder, ChevronRight } from 'lucide-react';
+import { Plus, BookOpen, Search, X, Pencil, Trash2, Folder, ChevronRight, ChevronDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
   getGroups, createGroup, deleteGroup,
@@ -96,18 +96,22 @@ function HomePage() {
     return matchesSearch && matchesColor && matchesCollection;
   });
 
+  const folderMatchesColor = (decks) =>
+    colorFilter === 'all' || decks.some((g) => g.color === colorFilter);
+
   const folderCards = (() => {
-    const items = collections.map((c) => ({
-      kind: 'collection',
-      id: c.id,
-      name: c.name,
-      count: c.group_ids.length,
-      sampleColors: groups
-        .filter((g) => c.group_ids.includes(g.id))
-        .slice(0, 4)
-        .map((g) => g.color),
-      raw: c,
-    }));
+    const items = collections.map((c) => {
+      const memberDecks = groups.filter((g) => c.group_ids.includes(g.id));
+      return {
+        kind: 'collection',
+        id: c.id,
+        name: c.name,
+        count: c.group_ids.length,
+        sampleColors: memberDecks.slice(0, 4).map((g) => g.color),
+        decks: memberDecks,
+        raw: c,
+      };
+    });
     if (unassignedDecks.length > 0) {
       items.push({
         kind: 'unassigned',
@@ -115,10 +119,13 @@ function HomePage() {
         name: 'Unassigned',
         count: unassignedDecks.length,
         sampleColors: unassignedDecks.slice(0, 4).map((g) => g.color),
+        decks: unassignedDecks,
       });
     }
     const q = search.toLowerCase();
-    return q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
+    return items.filter(
+      (i) => (!q || i.name.toLowerCase().includes(q)) && folderMatchesColor(i.decks),
+    );
   })();
 
   const handleDeleteCollection = async (col) => {
@@ -169,80 +176,23 @@ function HomePage() {
         </button>
       </div>
 
-      {/* Collections row */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <button
-          onClick={() => setCollectionFilter('all')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
-            collectionFilter === 'all'
-              ? 'bg-indigo-600/20 border-indigo-500/60 text-indigo-300'
-              : 'border-white/10 text-zinc-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          All decks
-        </button>
-        {collections.map((c) => {
-          const active = collectionFilter === c.id;
-          return (
-            <div key={c.id} className="group/col relative flex items-center">
-              <button
-                onClick={() => setCollectionFilter(active ? 'all' : c.id)}
-                className={`pl-3 pr-8 py-1.5 text-xs font-medium rounded-full border transition-all max-w-[200px] truncate ${
-                  active
-                    ? 'bg-indigo-600/20 border-indigo-500/60 text-indigo-300'
-                    : 'border-white/10 text-zinc-400 hover:text-white hover:bg-white/5'
-                }`}
-                title={c.name}
-              >
-                {c.name}
-              </button>
-              <button
-                onClick={() => setCollectionEditor({ mode: 'edit', collection: c })}
-                aria-label={`Edit collection ${c.name}`}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-white opacity-0 group-hover/col:opacity-100 focus:opacity-100 transition-opacity"
-              >
-                <Pencil size={11} />
-              </button>
-            </div>
-          );
-        })}
-        <button
-          onClick={() => setCollectionEditor({ mode: 'new' })}
-          className="px-3 py-1.5 text-xs font-medium rounded-full border border-dashed border-white/15 text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
-        >
-          + New collection
-        </button>
+      {/* Filter dropdowns */}
+      <div className="flex items-center gap-2 mb-8 flex-wrap">
+        <CollectionDropdown
+          collections={collections}
+          active={collectionFilter}
+          hasUnassigned={unassignedDecks.length > 0}
+          onPick={setCollectionFilter}
+          onEdit={(c) => setCollectionEditor({ mode: 'edit', collection: c })}
+          onDelete={handleDeleteCollection}
+          onNew={() => setCollectionEditor({ mode: 'new' })}
+        />
+        <ColorDropdown
+          colors={FILTER_COLORS}
+          active={colorFilter}
+          onPick={setColorFilter}
+        />
       </div>
-
-      {/* Color filter (deck view only) */}
-      {!isFolderView && (
-        <div className="flex items-center gap-2 mb-8 flex-wrap">
-          <button
-            onClick={() => setColorFilter('all')}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-              colorFilter === 'all'
-                ? 'bg-white/10 text-white'
-                : 'text-zinc-500 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            All
-          </button>
-          {FILTER_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => setColorFilter(c)}
-              aria-label={`Filter by ${c}`}
-              className={`w-6 h-6 rounded-full transition-all ${
-                colorFilter === c
-                  ? 'ring-2 ring-offset-2 ring-offset-[#0a0a0b] ring-white/40 scale-110'
-                  : 'opacity-60 hover:opacity-100 hover:scale-110'
-              }`}
-              style={{ backgroundColor: c }}
-            />
-          ))}
-        </div>
-      )}
-      {isFolderView && <div className="mb-8" />}
 
       {/* Folder view (collection cards) */}
       {isFolderView ? (
@@ -298,7 +248,7 @@ function HomePage() {
                         e.stopPropagation();
                         setCollectionEditor({ mode: 'edit', collection: f.raw });
                       }}
-                      className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-zinc-600 hover:text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                       aria-label={`Edit collection ${f.name}`}
                     >
                       <Pencil size={14} />
@@ -357,7 +307,7 @@ function HomePage() {
                   />
                   <button
                     onClick={(e) => handleDeleteGroup(e, group.id)}
-                    className="text-xs text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    className="text-xs text-zinc-500 hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all"
                   >
                     Delete
                   </button>
@@ -539,6 +489,165 @@ function CollectionEditorModal({ editor, groups, onClose, onSaved, onDelete }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function FilterDropdown({ label, displayValue, accent, children }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-3 px-4 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl transition-colors min-w-[180px]"
+      >
+        <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">
+          {label}
+        </span>
+        <span className="flex-1 flex items-center gap-2 text-sm text-white text-left truncate">
+          {accent}
+          <span className="truncate">{displayValue}</span>
+        </span>
+        <ChevronDown size={14} className={`text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-2 min-w-full max-w-xs bg-[#141416] border border-white/10 rounded-xl shadow-xl p-1 max-h-[60vh] overflow-y-auto">
+          {typeof children === 'function' ? children(() => setOpen(false)) : children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollectionDropdown({ collections, active, hasUnassigned, onPick, onEdit, onDelete, onNew }) {
+  const displayValue =
+    active === 'all'
+      ? 'All collections'
+      : active === '__unassigned__'
+      ? 'Unassigned'
+      : collections.find((c) => c.id === active)?.name ?? 'All collections';
+
+  return (
+    <FilterDropdown label="Collection" displayValue={displayValue}>
+      {(close) => (
+        <>
+          <DropdownRow
+            label="All collections"
+            active={active === 'all'}
+            onClick={() => { onPick('all'); close(); }}
+          />
+          {hasUnassigned && (
+            <DropdownRow
+              label="Unassigned"
+              active={active === '__unassigned__'}
+              onClick={() => { onPick('__unassigned__'); close(); }}
+            />
+          )}
+          {collections.length > 0 && <div className="my-1 border-t border-white/5" />}
+          {collections.map((c) => (
+            <div
+              key={c.id}
+              className={`group flex items-center rounded-lg ${active === c.id ? 'bg-indigo-600/15' : 'hover:bg-white/5'}`}
+            >
+              <button
+                onClick={() => { onPick(c.id); close(); }}
+                className={`flex-1 text-left px-3 py-2 text-sm truncate ${
+                  active === c.id ? 'text-indigo-300 font-semibold' : 'text-zinc-200'
+                }`}
+              >
+                {c.name}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); close(); onEdit(c); }}
+                className="p-1.5 text-zinc-500 hover:text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                aria-label={`Edit ${c.name}`}
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); close(); onDelete(c); }}
+                className="p-1.5 mr-1 text-zinc-500 hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                aria-label={`Delete ${c.name}`}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+          <div className="mt-1 pt-1 border-t border-white/5">
+            <button
+              onClick={() => { close(); onNew(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-300 hover:bg-indigo-500/10 rounded-lg transition-colors"
+            >
+              <Plus size={14} />
+              New collection
+            </button>
+          </div>
+        </>
+      )}
+    </FilterDropdown>
+  );
+}
+
+function ColorDropdown({ colors, active, onPick }) {
+  const accent =
+    active === 'all'
+      ? null
+      : <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: active }} />;
+  const displayValue = active === 'all' ? 'All colors' : 'Color';
+
+  return (
+    <FilterDropdown label="Color" displayValue={displayValue} accent={accent}>
+      {(close) => (
+        <>
+          <DropdownRow
+            label="All colors"
+            active={active === 'all'}
+            onClick={() => { onPick('all'); close(); }}
+          />
+          <div className="my-1 border-t border-white/5" />
+          {colors.map((c) => (
+            <button
+              key={c}
+              onClick={() => { onPick(c); close(); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${
+                active === c ? 'bg-indigo-600/15 text-indigo-300 font-semibold' : 'text-zinc-200 hover:bg-white/5'
+              }`}
+            >
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: c }} />
+              {c}
+            </button>
+          ))}
+        </>
+      )}
+    </FilterDropdown>
+  );
+}
+
+function DropdownRow({ label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2 text-sm rounded-lg ${
+        active ? 'bg-indigo-600/15 text-indigo-300 font-semibold' : 'text-zinc-200 hover:bg-white/5'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

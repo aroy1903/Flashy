@@ -48,6 +48,8 @@ export default function Home() {
   const [colorFilter, setColorFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [collectionEditor, setCollectionEditor] = useState(null); // null | { mode: 'new'|'edit', collection? }
+  const [collectionMenuOpen, setCollectionMenuOpen] = useState(false);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -124,17 +126,22 @@ export default function Home() {
     return matchesSearch && matchesColor && matchesCollection;
   });
 
+  const folderMatchesColor = (decks) =>
+    colorFilter === 'all' ||
+    decks.some((g) => (g.color || '').toLowerCase() === colorFilter);
+
   const folderCards = (() => {
-    const items = collections.map((c) => ({
-      kind: 'collection',
-      id: c.id,
-      name: c.name,
-      count: c.group_ids.length,
-      sampleColors: groups
-        .filter((g) => c.group_ids.includes(g.id))
-        .slice(0, 4)
-        .map((g) => g.color),
-    }));
+    const items = collections.map((c) => {
+      const memberDecks = groups.filter((g) => c.group_ids.includes(g.id));
+      return {
+        kind: 'collection',
+        id: c.id,
+        name: c.name,
+        count: c.group_ids.length,
+        sampleColors: memberDecks.slice(0, 4).map((g) => g.color),
+        decks: memberDecks,
+      };
+    });
     if (unassignedDecks.length > 0) {
       items.push({
         kind: 'unassigned',
@@ -142,10 +149,15 @@ export default function Home() {
         name: 'Unassigned',
         count: unassignedDecks.length,
         sampleColors: unassignedDecks.slice(0, 4).map((g) => g.color),
+        decks: unassignedDecks,
       });
     }
     const q = search.toLowerCase();
-    return q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
+    return items.filter(
+      (i) =>
+        (!q || i.name.toLowerCase().includes(q)) &&
+        folderMatchesColor(i.decks),
+    );
   })();
 
   const onLongPressCollection = (collection) => {
@@ -207,99 +219,75 @@ export default function Home() {
         </Pressable>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.collectionRow}
-      >
+      <View style={styles.dropdownRow}>
         <Pressable
-          onPress={() => setCollectionFilter('all')}
-          hitSlop={6}
-          style={[
-            styles.collectionPill,
-            collectionFilter === 'all' && styles.collectionPillActive,
-          ]}
+          onPress={() => setCollectionMenuOpen(true)}
+          style={styles.dropdownBtn}
         >
-          <Text
-            style={[
-              styles.collectionPillText,
-              collectionFilter === 'all' && styles.collectionPillTextActive,
-            ]}
-          >
-            All decks
-          </Text>
+          <Text style={styles.dropdownLabel}>COLLECTION</Text>
+          <View style={styles.dropdownValueRow}>
+            <Text style={styles.dropdownValue} numberOfLines={1}>
+              {collectionFilter === 'all'
+                ? 'All collections'
+                : collectionFilter === '__unassigned__'
+                ? 'Unassigned'
+                : collections.find((c) => c.id === collectionFilter)?.name ?? 'All collections'}
+            </Text>
+            <Text style={styles.dropdownCaret}>▾</Text>
+          </View>
         </Pressable>
-        {collections.map((c) => {
-          const active = collectionFilter === c.id;
-          return (
-            <Pressable
-              key={c.id}
-              onPress={() => setCollectionFilter(active ? 'all' : c.id)}
-              onLongPress={() => onLongPressCollection(c)}
-              hitSlop={6}
-              style={[styles.collectionPill, active && styles.collectionPillActive]}
-            >
-              <Text
-                style={[
-                  styles.collectionPillText,
-                  active && styles.collectionPillTextActive,
-                ]}
-                numberOfLines={1}
-              >
-                {c.name}
-              </Text>
-            </Pressable>
-          );
-        })}
         <Pressable
-          onPress={() => setCollectionEditor({ mode: 'new' })}
-          hitSlop={6}
-          style={[styles.collectionPill, styles.collectionPillAdd]}
+          onPress={() => setColorMenuOpen(true)}
+          style={styles.dropdownBtn}
         >
-          <Text style={styles.collectionPillAddText}>+ New collection</Text>
+          <Text style={styles.dropdownLabel}>COLOR</Text>
+          <View style={styles.dropdownValueRow}>
+            {colorFilter !== 'all' && (
+              <View style={[styles.dropdownSwatch, { backgroundColor: colorFilter }]} />
+            )}
+            <Text style={styles.dropdownValue} numberOfLines={1}>
+              {colorFilter === 'all' ? 'All colors' : (BUCKET_LABELS[colorBucket(colorFilter)] || colorFilter)}
+            </Text>
+            <Text style={styles.dropdownCaret}>▾</Text>
+          </View>
         </Pressable>
-      </ScrollView>
+      </View>
 
-      {!isFolderView && (
-        <View style={styles.filterRow}>
-          <Pressable
-            onPress={() => setColorFilter('all')}
-            hitSlop={6}
-            style={[styles.allChip, colorFilter === 'all' && styles.allChipActive]}
-          >
-            <Text style={[
-              styles.allChipText,
-              colorFilter === 'all' && styles.allChipTextActive,
-            ]}>All</Text>
-          </Pressable>
-          {filterChips.map(({ color, bucket }) => {
-            const active = colorFilter === color;
-            return (
-              <Pressable
-                key={color}
-                onPress={() => setColorFilter(active ? 'all' : color)}
-                hitSlop={10}
-                accessibilityLabel={`Filter by ${BUCKET_LABELS[bucket] || color}`}
-                style={[styles.colorChipWrap, active && styles.colorChipWrapActive]}
-              >
-                <View
-                  style={[
-                    styles.colorChip,
-                    { backgroundColor: color },
-                    !active && { opacity: 0.55 },
-                  ]}
-                />
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
+      <CollectionMenu
+        visible={collectionMenuOpen}
+        collections={collections}
+        active={collectionFilter}
+        hasUnassigned={unassignedDecks.length > 0}
+        onPick={(v) => { setCollectionFilter(v); setCollectionMenuOpen(false); }}
+        onClose={() => setCollectionMenuOpen(false)}
+        onNew={() => { setCollectionMenuOpen(false); setCollectionEditor({ mode: 'new' }); }}
+        onEdit={(c) => { setCollectionMenuOpen(false); setCollectionEditor({ mode: 'edit', collection: c }); }}
+        onDelete={(c) => {
+          setCollectionMenuOpen(false);
+          confirmDestructive(
+            'Delete collection?',
+            'Decks inside will not be deleted.',
+            async () => {
+              await deleteDeckCollection(c.id);
+              if (collectionFilter === c.id) setCollectionFilter('all');
+              load();
+            },
+          );
+        }}
+      />
+      <ColorMenu
+        visible={colorMenuOpen}
+        chips={filterChips}
+        active={colorFilter}
+        onPick={(v) => { setColorFilter(v); setColorMenuOpen(false); }}
+        onClose={() => setColorMenuOpen(false)}
+      />
 
       {isFolderView ? (
         <FlatList
           data={folderCards}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xl }}
+          contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xl, gap: spacing.md }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -347,7 +335,7 @@ export default function Home() {
         <FlatList
           data={filteredDecks}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xl }}
+          contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xl, gap: spacing.md }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -576,10 +564,94 @@ function CreateModal({ visible, onClose, onCreated }) {
   );
 }
 
+function CollectionMenu({
+  visible, collections, active, hasUnassigned,
+  onPick, onClose, onNew, onEdit, onDelete,
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.menuBackdrop} onPress={onClose}>
+        <Pressable style={styles.menuSheet} onPress={() => {}}>
+          <Text style={styles.menuTitle}>Filter by collection</Text>
+          <ScrollView style={{ maxHeight: 360 }}>
+            <MenuItem label="All collections" active={active === 'all'} onPress={() => onPick('all')} />
+            {hasUnassigned && (
+              <MenuItem label="Unassigned" active={active === '__unassigned__'} onPress={() => onPick('__unassigned__')} />
+            )}
+            {collections.map((c) => (
+              <View key={c.id} style={styles.menuRowWrap}>
+                <Pressable
+                  style={[styles.menuRow, { flex: 1 }, active === c.id && styles.menuRowActive]}
+                  onPress={() => onPick(c.id)}
+                >
+                  <Text style={[styles.menuRowText, active === c.id && styles.menuRowTextActive]} numberOfLines={1}>
+                    {c.name}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => onEdit(c)} hitSlop={6} style={styles.menuMiniBtn}>
+                  <Text style={styles.menuMiniText}>Edit</Text>
+                </Pressable>
+                <Pressable onPress={() => onDelete(c)} hitSlop={6} style={styles.menuMiniBtn}>
+                  <Text style={[styles.menuMiniText, { color: colors.danger }]}>Delete</Text>
+                </Pressable>
+              </View>
+            ))}
+          </ScrollView>
+          <Pressable style={styles.menuNewBtn} onPress={onNew}>
+            <Text style={styles.menuNewBtnText}>＋ New collection</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function ColorMenu({ visible, chips, active, onPick, onClose }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.menuBackdrop} onPress={onClose}>
+        <Pressable style={styles.menuSheet} onPress={() => {}}>
+          <Text style={styles.menuTitle}>Filter by color</Text>
+          <ScrollView style={{ maxHeight: 360 }}>
+            <MenuItem label="All colors" active={active === 'all'} onPress={() => onPick('all')} />
+            {chips.length === 0 ? (
+              <Text style={styles.menuEmpty}>Your decks don't have any colors yet.</Text>
+            ) : (
+              chips.map(({ color, bucket }) => (
+                <Pressable
+                  key={color}
+                  style={[styles.menuRow, active === color && styles.menuRowActive]}
+                  onPress={() => onPick(color)}
+                >
+                  <View style={[styles.menuSwatch, { backgroundColor: color }]} />
+                  <Text style={[styles.menuRowText, active === color && styles.menuRowTextActive]}>
+                    {BUCKET_LABELS[bucket] || color}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function MenuItem({ label, active, onPress }) {
+  return (
+    <Pressable
+      style={[styles.menuRow, active && styles.menuRowActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.menuRowText, active && styles.menuRowTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, paddingBottom: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
   kicker: { color: colors.primaryHover, fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 3 },
   title: { color: colors.text, fontSize: 24, fontWeight: '700' },
   subtitle: { color: colors.textDim, marginTop: 4 },
@@ -592,7 +664,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   signOutText: { color: colors.textMuted, fontSize: 13 },
-  row: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  row: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   filterRow: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
@@ -647,7 +719,7 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start',
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    padding: spacing.lg, borderRadius: radii.lg, marginBottom: spacing.md,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, borderRadius: radii.lg,
   },
   dot: { width: 12, height: 12, borderRadius: 999, marginTop: 6 },
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
@@ -742,10 +814,82 @@ const styles = StyleSheet.create({
   },
   deckPickerCheckOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   deckPickerCheckMark: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  dropdownRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  dropdownBtn: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    minHeight: 56,
+    justifyContent: 'center',
+    gap: 4,
+  },
+  dropdownLabel: { color: colors.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  dropdownValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dropdownValue: { color: colors.text, fontSize: 14, fontWeight: '600', flex: 1 },
+  dropdownCaret: { color: colors.textMuted, fontSize: 12 },
+  dropdownSwatch: { width: 14, height: 14, borderRadius: 999 },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+    maxHeight: layout.maxSheetHeight,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+  },
+  menuTitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: spacing.md,
+  },
+  menuRowWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+    marginBottom: 2,
+  },
+  menuRowActive: { backgroundColor: 'rgba(20,184,166,0.14)' },
+  menuRowText: { color: colors.text, fontSize: 14, flex: 1 },
+  menuRowTextActive: { color: colors.primaryHover, fontWeight: '700' },
+  menuSwatch: { width: 18, height: 18, borderRadius: 999 },
+  menuMiniBtn: { paddingHorizontal: 8, paddingVertical: 10 },
+  menuMiniText: { color: colors.primary, fontSize: 12, fontWeight: '600' },
+  menuEmpty: { color: colors.textFaint, textAlign: 'center', paddingVertical: spacing.md },
+  menuNewBtn: {
+    marginTop: spacing.md,
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+  },
+  menuNewBtnText: { color: colors.primaryHover, fontWeight: '700' },
   folderCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    padding: spacing.lg, borderRadius: radii.lg, marginBottom: spacing.md,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, borderRadius: radii.lg,
   },
   folderIcon: {
     width: 36, height: 36, borderRadius: radii.md,

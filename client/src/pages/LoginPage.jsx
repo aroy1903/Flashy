@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -29,10 +28,8 @@ function LoginPage() {
     <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm">
         <Link to="/" className="flex items-center gap-2.5 mb-10">
-          <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center">
-            <Zap size={18} className="text-yellow-400" />
-          </div>
-          <span className="text-lg font-bold tracking-tight text-white">Flashy</span>
+          <img src="/icon.png" alt="" className="w-8 h-8 rounded-lg" />
+          <span className="text-lg font-bold tracking-tight text-white">StuddyPebble</span>
         </Link>
 
         <h1 className="text-2xl font-bold text-white mb-1">Welcome back</h1>

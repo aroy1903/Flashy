@@ -34,7 +34,7 @@ function StudyPage() {
       setGroup(groupRes.data);
       const fetched = cardsRes.data;
       setCards(fetched);
-      setCurrentIndex(prev => Math.min(prev, fetched.length - 1));
+      setCurrentIndex(prev => Math.max(0, Math.min(prev, fetched.length - 1)));
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -51,7 +51,11 @@ function StudyPage() {
   };
 
   const handleShuffle = () => {
-    const shuffled = [...cards].sort(() => Math.random() - 0.5);
+    const shuffled = [...cards];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     setCards(shuffled);
     setCurrentIndex(0);
   };
